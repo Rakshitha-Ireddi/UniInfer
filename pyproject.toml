@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uniinfer"
+version = "0.1.0"
+description = "Request-adaptive allocation of visual-token and KV-cache budgets for vision-language model inference"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Rakshitha Ireddi" }]
+keywords = ["vlm", "inference", "kv-cache", "token-pruning", "efficient-ml", "qwen2.5-vl"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: Apache Software License",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "torch>=2.4,<2.6",
+  "transformers>=4.49,<4.52",   # KV-cache API (DynamicCache.key_cache) changed in later releases (ADR-0003)
+  "accelerate>=1.0",
+  "numpy>=1.24,<2.3",
+  "pillow",
+]
+
+[project.optional-dependencies]
+experiments = ["datasets>=2.20", "qwen-vl-utils>=0.0.10", "scikit-learn>=1.4", "matplotlib>=3.8", "pandas", "tqdm"]
+dev = ["pytest>=8", "ruff>=0.6", "scikit-learn>=1.4"]
+
+[project.urls]
+Homepage = "https://github.com/Rakshitha-Ireddi/UniInfer"
+Issues = "https://github.com/Rakshitha-Ireddi/UniInfer/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "experiments/oracle"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E731", "B905", "E402", "E702"]  # E702: allow `sync(); t0 = perf_counter()` timing idiom

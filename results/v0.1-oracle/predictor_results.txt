@@ -1,0 +1,11 @@
+N=450 configs=28 folds=5 seeds=3; uncompressed score 0.855
+median per-request overhead: vision encoder 376 ms (paid anyway), T1/T2 features 1.4 ms, T3 full prefill 91 ms
+
+Held-out score (mean ± std over seeds) [realized average cost]
+budget                  static                per-task         task label only          T1 cheap stats        T2 +question emb      T3 +prefill hidden    oracle (upper bound)
+ 0.500      0.763±0.000 [0.41]      0.765±0.003 [0.42]      0.816±0.006 [0.49]      0.819±0.010 [0.54]      0.814±0.003 [0.57]      0.821±0.007 [0.57]      0.909±0.000 [0.50]
+ 0.375      0.710±0.000 [0.33]      0.722±0.003 [0.27]      0.800±0.006 [0.37]      0.798±0.009 [0.41]      0.796±0.002 [0.42]      0.792±0.014 [0.42]      0.909±0.000 [0.38]
+ 0.250      0.659±0.000 [0.25]      0.671±0.003 [0.22]      0.722±0.009 [0.24]      0.719±0.004 [0.26]      0.730±0.005 [0.27]      0.732±0.009 [0.27]      0.909±0.000 [0.25]
+ 0.150      0.530±0.002 [0.14]      0.563±0.005 [0.13]      0.587±0.004 [0.15]      0.600±0.009 [0.14]      0.584±0.002 [0.13]      0.575±0.007 [0.13]      0.903±0.000 [0.15]
+
+wrote C:\Users\iredd\Desktop\My Projects\Project 8\results\v0.1-oracle\predictor_results.json

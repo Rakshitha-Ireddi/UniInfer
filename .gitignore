@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Experiments: never commit models, caches, or raw datasets
+hf_cache/
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+data/
+logs/
+wandb/
+results/**/scratch/
+
+# Local environment
+.env
+env.sh
+*.local.*
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

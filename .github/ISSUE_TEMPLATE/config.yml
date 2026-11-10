@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and discussion
+    url: https://github.com/Rakshitha-Ireddi/UniInfer/discussions
+    about: Ask questions or discuss ideas before opening an issue.
