@@ -59,3 +59,15 @@ def test_three_stage_search_runs_and_respects_budget():
     Q = rng.random((100, 4))
     cas, _, cost = fit_cascade(S, C, Q, 0.5, max_stages=3, n_thresholds=7)
     assert cost <= 0.5 + 1e-9 and 1 <= len(cas.stages) <= 3
+
+
+def test_vectorized_search_matches_simulation():
+    """fit_cascade's internal (vectorized) score/cost must equal simulate() on the cascade it returns."""
+    rng = np.random.default_rng(3)
+    S = (rng.random((300, 10)) > 0.4).astype(float)
+    C = np.tile(np.linspace(1, 0.1, 10), (300, 1))
+    Q = rng.random((300, 10))
+    for stages, mode in [(2, "sum"), (3, "sum"), (2, "max")]:
+        cas, sc, co = fit_cascade(S, C, Q, 0.4, max_stages=stages, final_stage=0, cost_mode=mode)
+        s2, c2, _ = simulate(cas, S, C, Q, mode)
+        assert sc == pytest.approx(s2.mean()) and co == pytest.approx(c2.mean())

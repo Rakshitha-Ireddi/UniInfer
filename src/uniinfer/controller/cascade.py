@@ -63,30 +63,48 @@ def fit_cascade(S: np.ndarray, C: np.ndarray, Q: np.ndarray, budget: float, *, m
     cand = list(range(K)) if candidates is None else list(candidates)
     mean_cost = C.mean(0)
     best: tuple[float, float, Cascade] | None = None
+    add = (lambda x, y: x + y) if cost_mode == "sum" else np.maximum
 
-    def consider(cas: Cascade):
+    def consider_many(scores: np.ndarray, costs: np.ndarray, make):
+        """scores/costs: mean over requests for a grid of thresholds; make(idx) -> Cascade."""
         nonlocal best
-        sc, co, _ = simulate(cas, S, C, Q, cost_mode)
-        if co.mean() <= budget + 1e-9 and (best is None or (sc.mean(), -co.mean()) > (best[0], -best[1])):
-            best = (sc.mean(), co.mean(), cas)
+        ok = costs <= budget + 1e-9
+        if not ok.any():
+            return
+        # best feasible: highest score, then lowest cost
+        order = np.lexsort((costs, -np.where(ok, scores, -np.inf)))
+        i = order[0]
+        if best is None or (scores[i], -costs[i]) > (best[0], -best[1]):
+            best = (float(scores[i]), float(costs[i]), make(i))
 
     for c in cand:  # single-stage (static) cascades are always in the search space
-        consider(Cascade((c,), ()))
+        consider_many(np.array([S[:, c].mean()]), np.array([mean_cost[c]]), lambda i, c=c: Cascade((c,), ()))
     grids = {c: _threshold_grid(Q[:, c], n_thresholds) for c in cand}
     if max_stages >= 2:
         for a, b in product(cand, cand):
             if mean_cost[a] >= mean_cost[b] or mean_cost[a] > budget:
                 continue
-            for t in grids[a]:
-                consider(Cascade((a, b), (float(t),)))
+            T = grids[a]
+            acc = Q[:, a, None] >= T[None, :]                                  # (N, T) accept at stage 1
+            sc = np.where(acc, S[:, a, None], S[:, b, None]).mean(0)
+            co = np.where(acc, C[:, a, None], add(C[:, a], C[:, b])[:, None]).mean(0)
+            consider_many(sc, co, lambda i, a=a, b=b, T=T: Cascade((a, b), (float(T[i]),)))
     if max_stages >= 3:
         f = int(np.argmax(mean_cost)) if final_stage is None else final_stage
         small = {c: _threshold_grid(Q[:, c], max(5, n_thresholds // 2)) for c in cand}
         for a, b in product(cand, cand):
             if not (mean_cost[a] < mean_cost[b] < mean_cost[f]) or mean_cost[a] > budget:
                 continue
-            for t1, t2 in product(small[a], small[b]):
-                consider(Cascade((a, b, f), (float(t1), float(t2))))
+            T1, T2 = small[a], small[b]
+            acc1 = (Q[:, a, None] >= T1[None, :])[:, :, None]                   # (N, T1, 1)
+            acc2 = (Q[:, b, None] >= T2[None, :])[:, None, :]                   # (N, 1, T2)
+            s3 = np.where(acc1, S[:, a, None, None], np.where(acc2, S[:, b, None, None], S[:, f, None, None]))
+            c_ab = add(C[:, a], C[:, b])
+            c3 = np.where(acc1, C[:, a, None, None],
+                          np.where(acc2, c_ab[:, None, None], add(c_ab, C[:, f])[:, None, None]))
+            sc, co = s3.mean(0).ravel(), c3.mean(0).ravel()
+            consider_many(sc, co, lambda i, a=a, b=b, T1=T1, T2=T2:
+                          Cascade((a, b, f), (float(T1[i // len(T2)]), float(T2[i % len(T2)]))))
     if best is None:
         c = int(np.argmin(mean_cost))
         cas = Cascade((c,), ())

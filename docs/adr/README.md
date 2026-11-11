@@ -12,5 +12,6 @@ ADRs are never deleted. A reversed decision gets a new ADR that marks the old on
 | [0005](0005-cost-model-and-budgeted-selection.md) | Cost = relative KV memory; average budget; Lagrangian selection | Accepted |
 | [0006](0006-evaluation-protocol.md) | Evaluation protocol: oracle first, request-grouped CV, luck-free claims | Accepted |
 | [0007](0007-repository-and-reproducibility.md) | Repository layout, committed results, environment | Accepted |
+| [0008](0008-confidence-cascade.md) | Confidence cascades, with failed attempts paid for | Accepted |
 
 New ADRs: copy [`template.md`](template.md), take the next number, and open a PR.
