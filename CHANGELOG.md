@@ -5,6 +5,15 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- CPU percentile bootstrap confidence intervals for means (`uniinfer.stats.bootstrap_ci`) and 95%
+  request-level intervals for luck-free static, per-task and average-budget oracle scores. Bootstrap
+  replicates reselect configurations; cached oracle decisions avoid repeated lambda-grid searches.
+
+### Fixed
+- Preserve sampled-row summation order for static and per-task bootstrap selection at cost ties;
+  display luck-free scores and confidence intervals together in each table cell.
+
 ## [0.1.0] - 2026-11-10
 
 ### Added
