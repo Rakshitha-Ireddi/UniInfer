@@ -34,7 +34,7 @@ The central research question: **what cheap signal tells us, before answering, t
   Re-run the oracle with them. Does the headroom survive better operators?
 - 📋 **Scale and generalize:** 500+ requests per dataset, plus ChartQA, InfoVQA and MathVista; second VLM
   (LLaVA-OneVision or InternVL); a 7B model.
-- 🚧 **Statistics:** bootstrap CIs on every table (#4); paired tests vs the task-aware baseline (✅ for cascades).
+- ✅ **Statistics:** bootstrap CIs in `analyze.py` (#4); paired tests vs task-aware and a shuffled control for cascades.
 
 ## v0.3: Make it real in serving 📋
 
@@ -68,9 +68,9 @@ Bring weight compression in as a *static* axis that the per-request controller w
 ## Good first issues
 
 - Add a compression operator, for example **random** visual-token pruning (a sanity baseline) or **recent-window** KV
-- Add a dataset loader (ChartQA, InfoVQA) with its official metric in `uniinfer/metrics.py`
+- Add a dataset loader (InfoVQA) with its official metric in `uniinfer/metrics.py` (ChartQA ✅ #3)
 - Plot per-category MMBench sensitivity from the committed JSONL
-- Bootstrap confidence intervals in `analyze.py`
+- ~~Bootstrap confidence intervals in `analyze.py`~~ ✅ #4
 - A notebook showing which DocVQA questions are fragile and why
 
 ## Open research questions

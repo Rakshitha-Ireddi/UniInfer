@@ -6,6 +6,11 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `uniinfer.stats`: stratified request bootstrap (`bootstrap_ci`, `paired_diff`) and replicate-level
+  re-selection of the best static config and the oracle (`best_static_replicates`, `oracle_replicates`).
+  2000 replicates in about 2 s via resampling-count matrices (#4).
+- `experiments/oracle/analyze.py`: 95% CIs for static / per-task / oracle and the oracle-static gap
+  (`--n-boot`, `--seed`).
 - Confidence signals from greedy logits (`uniinfer.signals`), stored for every config by the sweep, and
   `QwenVLRunner.run_with_confidence` (#6).
 - `uniinfer.controller.cascade`: `Cascade`, `simulate`, `fit_cascade` (vectorized exhaustive search),
@@ -16,6 +21,8 @@ versions follow [SemVer](https://semver.org/).
 - ChartQA loader (content-hash ids) and relaxed-accuracy metric (#3).
 
 ### Findings
+- The oracle-static gap is significant at every budget (e.g. +0.217 [0.180, 0.252] at 25% memory).
+  Per-task static configs are **not** significantly better than one static config (CIs overlap).
 - Answer-level log-prob detects compression damage (AUROC 0.845). When failed attempts are paid for, a
   cascade's gain over task-aware allocation is matched by a shuffled-confidence control. When memory is
   freed before a retry, real confidence adds +1.4 to +3.2 points (significant at 3 of 4 budgets).
