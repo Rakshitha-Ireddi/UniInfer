@@ -1,7 +1,15 @@
 import numpy as np
 import pytest
 
-from uniinfer.controller import Cascade, best_static_config, fit_cascade, simulate
+from uniinfer.controller import (
+    Cascade,
+    best_static_config,
+    cascade_frontier,
+    fit_cascade,
+    fit_group_cascades,
+    simulate,
+    simulate_groups,
+)
 
 
 def _toy(n=400, seed=0, informative=True):
@@ -71,3 +79,46 @@ def test_vectorized_search_matches_simulation():
         cas, sc, co = fit_cascade(S, C, Q, 0.4, max_stages=stages, final_stage=0, cost_mode=mode)
         s2, c2, _ = simulate(cas, S, C, Q, mode)
         assert sc == pytest.approx(s2.mean()) and co == pytest.approx(c2.mean())
+
+
+def _random_problem(n=240, k=8, seed=5):
+    rng = np.random.default_rng(seed)
+    S = (rng.random((n, k)) > 0.35).astype(float)
+    C = np.tile(np.linspace(1, 0.1, k), (n, 1))
+    Q = S + 0.8 * rng.normal(size=(n, k))  # noisy but informative
+    return S, C, Q
+
+
+def test_frontier_is_pareto_and_contains_fit_cascade_optimum():
+    S, C, Q = _random_problem()
+    front = cascade_frontier(S, C, Q)
+    costs = [c for _, c, _ in front]
+    scores = [s for s, _, _ in front]
+    assert costs == sorted(costs) and all(b > a for a, b in zip(scores, scores[1:]))
+    for s, c, cas in front[:: max(1, len(front) // 10)]:  # stored numbers are what simulate() gives
+        s2, c2, _ = simulate(cas, S, C, Q)
+        assert s == pytest.approx(s2.mean()) and c == pytest.approx(c2.mean())
+    for B in [0.2, 0.4, 0.7]:
+        _, best, _ = fit_cascade(S, C, Q, B)
+        assert max(s for s, c, _ in front if c <= B + 1e-9) == pytest.approx(best)
+
+
+def test_group_cascades_one_group_equals_fit_cascade():
+    S, C, Q = _random_problem()
+    g = np.zeros(len(S), int)
+    for B in [0.25, 0.5]:
+        cas = fit_group_cascades(S, C, Q, g, B)[0]
+        _, best, _ = fit_cascade(S, C, Q, B)
+        assert simulate(cas, S, C, Q)[0].mean() == pytest.approx(best)
+
+
+def test_group_cascades_respect_shared_budget_and_beat_one_cascade_on_train():
+    S, C, Q = _random_problem()
+    g = np.repeat([0, 1, 2], len(S) // 3)
+    S[g == 2] = 1.0  # group 2 is trivially easy: budget should move to the other groups
+    for B in [0.2, 0.35, 0.5]:
+        per = fit_group_cascades(S, C, Q, g, B)
+        sc, co, _ = simulate_groups(per, S, C, Q, g)
+        assert co.mean() <= B + 1e-9
+        _, one, _ = fit_cascade(S, C, Q, B)
+        assert sc.mean() >= one - 1e-9

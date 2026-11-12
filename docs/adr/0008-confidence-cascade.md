@@ -1,6 +1,7 @@
 # ADR-0008: Confidence cascades, with failed attempts paid for
 
-- **Status:** Accepted (experiment in progress, see issue #6)
+- **Status:** Accepted. Experiment complete (2026-11-12); hypothesis **not supported** under the primary cost
+  model. See Outcome.
 - **Date:** 2026-11-11
 
 ## Context
@@ -42,3 +43,19 @@ it comes for free: the logits already exist.
   accounting is honest. Latency accounting arrives with dedicated-GPU measurements (v0.3).
 - Falsifiable: if no cascade beats task-aware allocation at matched realized cost, confidence is not the
   missing per-request signal, and we report that.
+
+## Outcome (2026-11-12)
+Full numbers are in [`experiments/cascade/README.md`](../../experiments/cascade/README.md).
+- **Signal:** answer min log-prob detects compression damage with AUROC 0.845. First-token signals are at
+  chance on DocVQA.
+- **Primary (`sum` cost):** no cascade beats task-aware allocation through confidence. A per-task cascade
+  beats it at 15% memory, but the *shuffled-confidence* control does equally well, so the gain comes from
+  mixing configs, not from the signal. By this ADR's own falsification rule, confidence is **not** the
+  missing per-request signal *when retries are paid in full*.
+- **Secondary (`max` cost):** real confidence beats the shuffled control by +1.4 to +3.2 points at 3 of 4
+  budgets (paired bootstrap CIs exclude 0).
+- **Added during the experiment** (exploratory, not pre-registered): per-task cascades under a shared
+  budget (`fit_group_cascades`) and the shuffled-confidence control. Every later cascade claim must
+  beat the shuffled control, not just static.
+- **Consequence:** cheap escalation (reusing or re-compressing the prefill cache, or freeing memory before
+  a retry) becomes a v0.3 serving item. The cascade's value depends on it.

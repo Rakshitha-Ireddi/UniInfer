@@ -50,50 +50,30 @@ def _threshold_grid(q: np.ndarray, n: int) -> np.ndarray:
     return np.r_[-np.inf, qs, np.inf]  # -inf: never escalate; +inf: always escalate
 
 
-def fit_cascade(S: np.ndarray, C: np.ndarray, Q: np.ndarray, budget: float, *, max_stages: int = 2,
-                final_stage: int | None = None, n_thresholds: int = 21, cost_mode: str = "sum",
-                candidates: list[int] | None = None) -> tuple[Cascade, float, float]:
-    """Exhaustive search for the best cascade on training data under a mean-cost budget.
-
-    max_stages=2: all (cheap, escalate) pairs and thresholds.
-    max_stages=3: (c1, c2, final_stage) with two thresholds; final_stage defaults to the most expensive config.
-    Returns (cascade, train score, train cost). Falls back to the cheapest single config if nothing is feasible.
-    """
+def _enumerate(S, C, Q, *, max_stages, final_stage, n_thresholds, cost_mode, candidates, max_first_cost=np.inf):
+    """Yield (mean scores, mean costs, make) for every cascade family; make(i) -> Cascade for grid point i."""
     K = S.shape[1]
     cand = list(range(K)) if candidates is None else list(candidates)
     mean_cost = C.mean(0)
-    best: tuple[float, float, Cascade] | None = None
     add = (lambda x, y: x + y) if cost_mode == "sum" else np.maximum
 
-    def consider_many(scores: np.ndarray, costs: np.ndarray, make):
-        """scores/costs: mean over requests for a grid of thresholds; make(idx) -> Cascade."""
-        nonlocal best
-        ok = costs <= budget + 1e-9
-        if not ok.any():
-            return
-        # best feasible: highest score, then lowest cost
-        order = np.lexsort((costs, -np.where(ok, scores, -np.inf)))
-        i = order[0]
-        if best is None or (scores[i], -costs[i]) > (best[0], -best[1]):
-            best = (float(scores[i]), float(costs[i]), make(i))
-
     for c in cand:  # single-stage (static) cascades are always in the search space
-        consider_many(np.array([S[:, c].mean()]), np.array([mean_cost[c]]), lambda i, c=c: Cascade((c,), ()))
+        yield np.array([S[:, c].mean()]), np.array([mean_cost[c]]), lambda i, c=c: Cascade((c,), ())
     grids = {c: _threshold_grid(Q[:, c], n_thresholds) for c in cand}
     if max_stages >= 2:
         for a, b in product(cand, cand):
-            if mean_cost[a] >= mean_cost[b] or mean_cost[a] > budget:
+            if mean_cost[a] >= mean_cost[b] or mean_cost[a] > max_first_cost:
                 continue
             T = grids[a]
             acc = Q[:, a, None] >= T[None, :]                                  # (N, T) accept at stage 1
             sc = np.where(acc, S[:, a, None], S[:, b, None]).mean(0)
             co = np.where(acc, C[:, a, None], add(C[:, a], C[:, b])[:, None]).mean(0)
-            consider_many(sc, co, lambda i, a=a, b=b, T=T: Cascade((a, b), (float(T[i]),)))
+            yield sc, co, lambda i, a=a, b=b, T=T: Cascade((a, b), (float(T[i]),))
     if max_stages >= 3:
         f = int(np.argmax(mean_cost)) if final_stage is None else final_stage
         small = {c: _threshold_grid(Q[:, c], max(5, n_thresholds // 2)) for c in cand}
         for a, b in product(cand, cand):
-            if not (mean_cost[a] < mean_cost[b] < mean_cost[f]) or mean_cost[a] > budget:
+            if not (mean_cost[a] < mean_cost[b] < mean_cost[f]) or mean_cost[a] > max_first_cost:
                 continue
             T1, T2 = small[a], small[b]
             acc1 = (Q[:, a, None] >= T1[None, :])[:, :, None]                   # (N, T1, 1)
@@ -103,11 +83,98 @@ def fit_cascade(S: np.ndarray, C: np.ndarray, Q: np.ndarray, budget: float, *, m
             c3 = np.where(acc1, C[:, a, None, None],
                           np.where(acc2, c_ab[:, None, None], add(c_ab, C[:, f])[:, None, None]))
             sc, co = s3.mean(0).ravel(), c3.mean(0).ravel()
-            consider_many(sc, co, lambda i, a=a, b=b, T1=T1, T2=T2:
-                          Cascade((a, b, f), (float(T1[i // len(T2)]), float(T2[i % len(T2)]))))
+            yield sc, co, lambda i, a=a, b=b, T1=T1, T2=T2: Cascade(
+                (a, b, f), (float(T1[i // len(T2)]), float(T2[i % len(T2)])))
+
+
+def fit_cascade(S: np.ndarray, C: np.ndarray, Q: np.ndarray, budget: float, *, max_stages: int = 2,
+                final_stage: int | None = None, n_thresholds: int = 21, cost_mode: str = "sum",
+                candidates: list[int] | None = None) -> tuple[Cascade, float, float]:
+    """Exhaustive search for the best cascade on training data under a mean-cost budget.
+
+    max_stages=2: all (cheap, escalate) pairs and thresholds.
+    max_stages=3: (c1, c2, final_stage) with two thresholds; final_stage defaults to the most expensive config.
+    Returns (cascade, train score, train cost). Falls back to the cheapest single config if nothing is feasible.
+    """
+    best: tuple[float, float, Cascade] | None = None
+    for scores, costs, make in _enumerate(S, C, Q, max_stages=max_stages, final_stage=final_stage,
+                                          n_thresholds=n_thresholds, cost_mode=cost_mode,
+                                          candidates=candidates, max_first_cost=budget):
+        ok = costs <= budget + 1e-9
+        if not ok.any():
+            continue
+        # best feasible: highest score, then lowest cost
+        i = np.lexsort((costs, -np.where(ok, scores, -np.inf)))[0]
+        if best is None or (scores[i], -costs[i]) > (best[0], -best[1]):
+            best = (float(scores[i]), float(costs[i]), make(i))
     if best is None:
-        c = int(np.argmin(mean_cost))
+        c = int(np.argmin(C.mean(0)))
         cas = Cascade((c,), ())
         sc, co, _ = simulate(cas, S, C, Q, cost_mode)
         return cas, float(sc.mean()), float(co.mean())
     return best[2], float(best[0]), float(best[1])
+
+
+def _pareto(scores: np.ndarray, costs: np.ndarray) -> np.ndarray:
+    """Indices of the (max score, min cost) Pareto frontier, sorted by increasing cost."""
+    order = np.lexsort((-scores, costs))
+    keep, best = [], -np.inf
+    for i in order:
+        if scores[i] > best + 1e-12:
+            keep.append(i)
+            best = scores[i]
+    return np.array(keep, int)
+
+
+def cascade_frontier(S: np.ndarray, C: np.ndarray, Q: np.ndarray, *, max_stages: int = 2,
+                     n_thresholds: int = 21, cost_mode: str = "sum",
+                     candidates: list[int] | None = None) -> list[tuple[float, float, Cascade]]:
+    """Training-set Pareto frontier [(mean score, mean cost, cascade), ...] by increasing cost."""
+    sc, co, mk = [], [], []
+    for scores, costs, make in _enumerate(S, C, Q, max_stages=max_stages, final_stage=None,
+                                          n_thresholds=n_thresholds, cost_mode=cost_mode, candidates=candidates):
+        p = _pareto(scores, costs)  # prune per family first: keeps memory small
+        sc.append(scores[p])
+        co.append(costs[p])
+        mk.extend((make, int(i)) for i in p)
+    sc, co = np.concatenate(sc), np.concatenate(co)
+    return [(float(sc[i]), float(co[i]), mk[i][0](mk[i][1])) for i in _pareto(sc, co)]
+
+
+def fit_group_cascades(S: np.ndarray, C: np.ndarray, Q: np.ndarray, groups: np.ndarray, budget: float,
+                       **kw) -> dict:
+    """One cascade per group (e.g. task) under ONE shared average-cost budget.
+
+    Each group contributes its training frontier. Frontiers are merged exactly (request-weighted sums,
+    Pareto-pruned after each merge), and the best combination whose overall mean cost fits `budget` wins.
+    Returns {group: Cascade}. Groups whose frontier cannot meet the budget jointly fall back to their
+    cheapest point.
+    """
+    names = list(np.unique(groups))
+    N = len(S)
+    fronts = {g: cascade_frontier(S[groups == g], C[groups == g], Q[groups == g], **kw) for g in names}
+    # merged state: arrays of total (score*n, cost*n) and the per-group choice index for each point
+    tot_s = np.array([0.0])
+    tot_c = np.array([0.0])
+    choice = np.zeros((1, 0), int)
+    for g in names:
+        n = (groups == g).sum()
+        fs = np.array([p[0] for p in fronts[g]]) * n
+        fc = np.array([p[1] for p in fronts[g]]) * n
+        s = (tot_s[:, None] + fs[None]).ravel()
+        c = (tot_c[:, None] + fc[None]).ravel()
+        ch = np.concatenate([np.repeat(choice, len(fs), 0), np.tile(np.arange(len(fs)), len(tot_s))[:, None]], 1)
+        p = _pareto(s, c)
+        tot_s, tot_c, choice = s[p], c[p], ch[p]
+    ok = tot_c / N <= budget + 1e-9
+    k = int(np.argmax(np.where(ok, tot_s, -np.inf))) if ok.any() else 0  # index 0 = cheapest combination
+    return {g: fronts[g][choice[k, j]][2] for j, g in enumerate(names)}
+
+
+def simulate_groups(cascades: dict, S, C, Q, groups, cost_mode: str = "sum"):
+    """simulate() with a per-group cascade; returns per-request (score, cost, stage)."""
+    score, cost, stage = np.zeros(len(S)), np.zeros(len(S)), np.zeros(len(S), int)
+    for g, cas in cascades.items():
+        m = groups == g
+        score[m], cost[m], stage[m] = simulate(cas, S[m], C[m], Q[m], cost_mode)
+    return score, cost, stage

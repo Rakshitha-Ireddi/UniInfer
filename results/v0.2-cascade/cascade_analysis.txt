@@ -1,0 +1,96 @@
+N=450 configs=28 folds=5 seeds=3
+sanity: 12050/12600 predictions identical to v0.1 (450/450 requests matched); mean score 0.6773 (v0.1) vs 0.6790 (this sweep). Differences come from BF16 kernels on a different GPU model, not from confidence logging (see the README).
+
+=== 1. Does confidence detect damage? AUROC for 'compressed config keeps the answer' ===
+  signal                      all   docvqa  mmbench  textvqa
+  first-token prob          0.597    0.493    0.895    0.548
+  first-token margin        0.587    0.494    0.906    0.540
+  first-token -entropy      0.625    0.502    0.848    0.559
+  answer mean logprob       0.835    0.809    0.872    0.780
+  answer min logprob        0.845    0.805    0.869    0.768
+  (0.5 = no information, 1.0 = perfect)
+
+[50s] baselines done; fitting cascades...
+[52s] cascade-2 first-token prob done
+[54s] cascade-2 first-token margin done
+[56s] cascade-2 first-token -entropy done
+[58s] cascade-2 answer mean logprob done
+[60s] cascade-2 answer min logprob done
+[112s] task-aware cascade + shuffled control done
+
+=== 2. Held-out score, mean ± std over seeds  [realized average cost] ===
+  cascade cost = SUM over attempted stages (failed attempts are paid for) unless marked max-cost
+  method                                                                          B=0.5                 B=0.375                  B=0.25                  B=0.15
+  static                                                             0.769±0.000 [0.41]      0.708±0.000 [0.33]      0.665±0.000 [0.25]      0.543±0.008 [0.14]
+  per-task                                                           0.772±0.003 [0.42]      0.707±0.001 [0.27]      0.672±0.003 [0.22]      0.574±0.007 [0.13]
+  task-aware                                                         0.814±0.006 [0.49]      0.788±0.004 [0.37]      0.721±0.010 [0.24]      0.581±0.005 [0.14]
+  learned T1                                                         0.816±0.006 [0.54]      0.797±0.008 [0.41]      0.719±0.004 [0.25]      0.591±0.004 [0.14]
+  cascade-2 | first-token prob                                       0.778±0.002 [0.49]      0.719±0.004 [0.36]      0.665±0.000 [0.25]      0.535±0.004 [0.15]
+  cascade-2 | first-token margin                                     0.777±0.008 [0.49]      0.706±0.007 [0.36]      0.665±0.000 [0.25]      0.536±0.003 [0.15]
+  cascade-2 | first-token -entropy                                   0.765±0.003 [0.50]      0.731±0.007 [0.36]      0.653±0.011 [0.24]      0.543±0.007 [0.15]
+  cascade-2 | answer mean logprob                                    0.781±0.008 [0.48]      0.742±0.004 [0.37]      0.663±0.005 [0.24]      0.572±0.003 [0.15]
+  cascade-2 | answer min logprob                                     0.783±0.010 [0.48]      0.752±0.008 [0.37]      0.673±0.000 [0.24]      0.575±0.006 [0.15]
+  cascade-3 | answer min logprob                                     0.785±0.009 [0.48]      0.748±0.005 [0.36]      0.677±0.006 [0.24]      0.575±0.006 [0.15]
+  cascade-2 | answer min logprob | max-cost                          0.782±0.007 [0.48]      0.757±0.003 [0.36]      0.706±0.004 [0.24]      0.613±0.003 [0.15]
+  task-aware cascade | answer min logprob                            0.830±0.003 [0.49]      0.803±0.006 [0.37]      0.714±0.006 [0.25]      0.613±0.011 [0.15]
+  task-aware cascade | answer min logprob SHUFFLED (control)         0.827±0.008 [0.49]      0.801±0.006 [0.37]      0.738±0.009 [0.25]      0.605±0.003 [0.15]
+  task-aware cascade | answer min logprob | max-cost                 0.841±0.007 [0.49]      0.820±0.013 [0.37]      0.769±0.008 [0.25]      0.604±0.005 [0.15]
+  task-aware cascade | answer min logprob SHUFFLED | max-cost        0.827±0.014 [0.50]      0.797±0.004 [0.37]      0.737±0.009 [0.25]      0.615±0.007 [0.15]
+  oracle (luck-free)                                                 0.858±0.000 [0.50]      0.858±0.000 [0.38]      0.858±0.000 [0.25]      0.855±0.000 [0.15]
+  oracle (raw)                                                       0.907±0.000 [0.50]      0.907±0.000 [0.38]      0.907±0.000 [0.25]      0.901±0.000 [0.15]
+
+=== 3. Cascades chosen on fold 1 (seed 0), signal = answer min logprob ===
+  B=0.5: uniform@0.25|kv@0.25 -> dissim@0.50|kv@1.00   thresholds [-0.324]   escalation rate 69%
+        docvqa   escalated 95%
+        mmbench  escalated 25%
+        textvqa  escalated 89%
+  B=0.375: dissim@0.25|kv@0.25 -> dissim@0.50|kv@1.00   thresholds [-0.625]   escalation rate 54%
+        docvqa   escalated 84%
+        mmbench  escalated 13%
+        textvqa  escalated 65%
+  B=0.25: uniform@0.25|kv@0.25 -> dissim@0.50|kv@0.75   thresholds [-1.06]   escalation rate 38%
+        docvqa   escalated 62%
+        mmbench  escalated 2%
+        textvqa  escalated 51%
+  B=0.15: dissim@0.25|kv@0.25 -> dissim@0.25|kv@0.75   thresholds [-1.32]   escalation rate 28%
+        docvqa   escalated 57%
+        mmbench  escalated 0%
+        textvqa  escalated 28%
+
+=== 4. Paired tests (same requests, same folds; per-request held-out difference averaged over seeds;
+       95% CI from a dataset-stratified request bootstrap, 2000 replicates) ===
+  task-aware cascade - task-aware selector
+    B=0.5: +0.017 [-0.000, +0.034]  P(diff<=0)=0.031  cost difference +0.002
+    B=0.375: +0.015 [-0.005, +0.035]  P(diff<=0)=0.071  cost difference -0.003
+    B=0.25: -0.007 [-0.025, +0.010]  P(diff<=0)=0.776  cost difference +0.005
+    B=0.15: +0.033 [+0.011, +0.056]  P(diff<=0)=0.002  cost difference +0.009
+  task-aware cascade - same cascade with SHUFFLED confidence
+    B=0.5: +0.004 [-0.011, +0.019]  P(diff<=0)=0.311  cost difference +0.004
+    B=0.375: +0.002 [-0.013, +0.018]  P(diff<=0)=0.397  cost difference -0.001
+    B=0.25: -0.024 [-0.040, -0.007]  P(diff<=0)=0.999  cost difference -0.001
+    B=0.15: +0.008 [-0.012, +0.028]  P(diff<=0)=0.213  cost difference +0.002
+  [max-cost] task-aware cascade - SHUFFLED confidence
+    B=0.5: +0.014 [+0.002, +0.026]  P(diff<=0)=0.009  cost difference -0.005
+    B=0.375: +0.023 [+0.008, +0.039]  P(diff<=0)=0.001  cost difference -0.002
+    B=0.25: +0.032 [+0.009, +0.054]  P(diff<=0)=0.004  cost difference +0.001
+    B=0.15: -0.011 [-0.031, +0.008]  P(diff<=0)=0.874  cost difference +0.001
+
+=== 5. Task-aware cascades chosen on fold 1 (seed 0), signal = answer min logprob ===
+  B=0.5: realized cost 0.49
+        docvqa   dissim@0.50|kv@1.00 -> full@1.00|kv@1.00      thr [-0.442]  escalated 40%  cost 0.92
+        mmbench  uniform@0.25|kv@0.25 -> dissim@0.25|kv@0.50   thr [-0.769]  escalated 5%  cost 0.12
+        textvqa  dissim@0.25|kv@1.00 -> uniform@0.75|kv@0.75   thr [-0.8]  escalated 25%  cost 0.42
+  B=0.375: realized cost 0.36
+        docvqa   dissim@0.50|kv@1.00 -> uniform@0.75|kv@1.00   thr [-1.26]  escalated 5%  cost 0.56
+        mmbench  uniform@0.25|kv@0.25 -> dissim@0.25|kv@0.50   thr [-0.769]  escalated 5%  cost 0.12
+        textvqa  dissim@0.25|kv@1.00 -> uniform@0.75|kv@0.75   thr [-0.8]  escalated 25%  cost 0.42
+  B=0.25: realized cost 0.25
+        docvqa   dissim@0.25|kv@0.75 -> uniform@0.50|kv@1.00   thr [-1.46]  escalated 18%  cost 0.31
+        mmbench  uniform@0.25|kv@0.25 -> dissim@0.25|kv@0.50   thr [-0.769]  escalated 5%  cost 0.12
+        textvqa  dissim@0.25|kv@1.00 -> uniform@0.50|kv@1.00   thr [-1.36]  escalated 7%  cost 0.32
+  B=0.15: realized cost 0.15
+        docvqa   dissim@0.25|kv@0.75                           thr [-]  escalated 0%  cost 0.21
+        mmbench  uniform@0.25|kv@0.25 -> dissim@0.25|kv@0.50   thr [-0.769]  escalated 5%  cost 0.12
+        textvqa  dissim@0.25|kv@0.25 -> dissim@0.25|kv@0.75    thr [-1.42]  escalated 26%  cost 0.12
+
+wrote C:\Users\iredd\Desktop\My Projects\Project 8\results\v0.2-cascade\cascade_results.json  (115s)
