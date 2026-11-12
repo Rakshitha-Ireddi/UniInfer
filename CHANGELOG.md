@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `uniinfer.compression.compress_kv_recent`: StreamingLLM-style attention-sink and recent-window
+  KV eviction with exact token budgets, independent cache copies and CPU tests (#2).
 - `uniinfer.stats`: stratified request bootstrap (`bootstrap_ci`, `paired_diff`) and replicate-level
   re-selection of the best static config and the oracle (`best_static_replicates`, `oracle_replicates`).
   2000 replicates in about 2 s via resampling-count matrices (#4).
