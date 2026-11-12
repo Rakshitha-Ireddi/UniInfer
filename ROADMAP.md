@@ -21,8 +21,11 @@ Legend: ✅ done · 🚧 in progress · 📋 planned · 💡 open idea (needs an
 
 The central research question: **what cheap signal tells us, before answering, that a request is fragile?**
 
-- 🚧 **Confidence-driven cascade.** Answer with a cheap config first. If first-token entropy or margin is low,
-  escalate to a larger budget. Measure the quality/cost trade-off, including the cost of the retries.
+- ✅ **Confidence-driven cascade** ([results](experiments/cascade/README.md)). Answer log-prob detects damage
+  (AUROC 0.85), but when retries are paid in full it adds nothing over a shuffled control. It helps
+  (+1.4 to +3.2 pts) only when memory is freed before the retry, so the bottleneck is **escalation cost**.
+- 📋 **Learned stopping rule:** combine several confidence signals with task identity; must beat the
+  shuffled-confidence control.
 - 📋 **Early-exit probe.** Run the first k layers on the *pruned* sequence and read text→image attention
   mass as a fragility signal (cost ≪ full prefill, unlike T3).
 - 📋 **OCR-density and fine-detail signals.** Text-region density, edge energy and resolution vs question type.
@@ -31,12 +34,14 @@ The central research question: **what cheap signal tells us, before answering, t
   Re-run the oracle with them. Does the headroom survive better operators?
 - 📋 **Scale and generalize:** 500+ requests per dataset, plus ChartQA, InfoVQA and MathVista; second VLM
   (LLaVA-OneVision or InternVL); a 7B model.
-- 📋 **Statistics:** bootstrap CIs on every table; paired tests vs the task-aware baseline.
+- ✅ **Statistics:** bootstrap CIs in `analyze.py` (#4); paired tests vs task-aware and a shuffled control for cascades.
 
 ## v0.3: Make it real in serving 📋
 
 The memory saving matters when many requests share a KV pool. Show it end to end.
 
+- 📋 **Cheap escalation** (motivated by v0.2): keep the uncompressed prefill KV in a paged pool and re-compress
+  it instead of re-running prefill; free the cheap attempt's pages before the retry
 - 📋 Batched decode with **heterogeneous per-request KV lengths**
 - 📋 Admission control: requests/sec and tail latency under a fixed KV-memory cap
 - 📋 vLLM integration (paged KV plus per-request token budgets)
@@ -63,9 +68,9 @@ Bring weight compression in as a *static* axis that the per-request controller w
 ## Good first issues
 
 - Add a compression operator, for example **random** visual-token pruning (a sanity baseline) or **recent-window** KV
-- Add a dataset loader (ChartQA, InfoVQA) with its official metric in `uniinfer/metrics.py`
+- Add a dataset loader (InfoVQA) with its official metric in `uniinfer/metrics.py` (ChartQA ✅ #3)
 - Plot per-category MMBench sensitivity from the committed JSONL
-- Bootstrap confidence intervals in `analyze.py`
+- ~~Bootstrap confidence intervals in `analyze.py`~~ ✅ #4
 - A notebook showing which DocVQA questions are fragile and why
 
 ## Open research questions

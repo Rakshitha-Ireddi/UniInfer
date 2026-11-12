@@ -18,8 +18,33 @@ from transformers.cache_utils import DynamicCache
 from ..compression import compress_kv_l2norm, select_visual_tokens
 from ..data import MAX_NEW_TOKENS
 from ..metrics import SCORERS
+from ..signals import answer_confidence, token_confidence
 
 DEFAULT_MODEL = "Qwen/Qwen2.5-VL-3B-Instruct"
+
+
+@dataclass
+class Prefill:
+    first_token: int
+    first_conf: dict          # token_confidence() of the first generated token
+    cache: DynamicCache
+    seq_len: int
+    seconds: float
+
+
+@dataclass
+class Decoded:
+    text: str
+    n_tokens: int
+    seconds: float
+    token_logprobs: list      # log-prob of each greedy token, first token included
+
+
+def confidence_record(pre: Prefill, dec: Decoded) -> dict:
+    """Flat confidence fields stored per (request, config) in sweep results."""
+    rec = {f"first_{k}": round(v, 6) for k, v in pre.first_conf.items()}
+    rec.update({f"ans_{k}": round(v, 6) for k, v in answer_confidence(dec.token_logprobs).items()})
+    return rec
 
 
 @dataclass
@@ -72,22 +97,28 @@ class QwenVLRunner:
         return Encoded(emb, pos, mask, vis, {"encode_s": time.perf_counter() - t0})
 
     @torch.inference_mode()
-    def prefill(self, enc: Encoded, keep: torch.Tensor):
-        """Prefill on the kept tokens only. Returns (first_token, cache, seq_len, seconds)."""
+    def prefill(self, enc: Encoded, keep: torch.Tensor) -> Prefill:
+        """Prefill on the kept tokens only; also reports first-token confidence (free: logits exist)."""
         e, p = enc.embeds[:, keep], enc.position_ids[:, :, keep]
         L = e.shape[1]
         self._sync(); t0 = time.perf_counter()
         out = self.model(inputs_embeds=e, position_ids=p,
                          attention_mask=torch.ones(1, L, device=self.dev, dtype=torch.long),
                          past_key_values=DynamicCache(), use_cache=True)
-        first = int(out.logits[0, -1].argmax())
+        last = out.logits[0, -1]
+        first = int(last.argmax())
+        conf = token_confidence(last)
         self._sync()
-        return first, out.past_key_values, L, time.perf_counter() - t0
+        return Prefill(first, conf, out.past_key_values, L, time.perf_counter() - t0)
 
     @torch.inference_mode()
-    def decode(self, first: int, cache: DynamicCache, next_position: int, max_new_tokens: int):
-        """Greedy decode. Decode-step positions continue from max(prompt position) + 1, as in HF."""
-        toks, tok = [first], first
+    def decode(self, pre: Prefill, cache: DynamicCache, next_position: int, max_new_tokens: int) -> Decoded:
+        """Greedy decode. Decode-step positions continue from max(prompt position) + 1, as in HF.
+
+        Records the log-prob of every greedy token (the first one comes from the prefill logits).
+        """
+        tok = pre.first_token
+        toks, logprobs = [tok], [pre.first_conf["logprob"]]
         self._sync(); t0 = time.perf_counter()
         for t in range(max_new_tokens - 1):
             if tok in self.eos:
@@ -97,20 +128,29 @@ class QwenVLRunner:
             o = self.model(input_ids=torch.tensor([[tok]], device=self.dev), position_ids=pid,
                            attention_mask=torch.ones(1, cur + 1, device=self.dev, dtype=torch.long),
                            past_key_values=cache, use_cache=True)
-            tok = int(o.logits[0, -1].argmax())
+            step = o.logits[0, -1]
+            tok = int(step.argmax())
             toks.append(tok)
+            logprobs.append(torch.log_softmax(step.float(), dim=-1)[tok].item())
         self._sync()
         text = self.proc.tokenizer.decode([x for x in toks if x not in self.eos], skip_special_tokens=True)
-        return text.strip(), len(toks), time.perf_counter() - t0
+        return Decoded(text.strip(), len(toks), time.perf_counter() - t0, logprobs)
 
     # ------------------------------------------------------------------ end-to-end
     @torch.inference_mode()
     def run(self, image, prompt: str, v_ratio=1.0, v_method="dissim", kv_ratio=1.0, max_new_tokens=32) -> str:
         """Answer one request under a single configuration."""
+        return self.run_with_confidence(image, prompt, v_ratio, v_method, kv_ratio, max_new_tokens)[0]
+
+    @torch.inference_mode()
+    def run_with_confidence(self, image, prompt: str, v_ratio=1.0, v_method="dissim", kv_ratio=1.0,
+                            max_new_tokens=32) -> tuple[str, dict]:
+        """Answer plus confidence signals: first_* (first token) and answer-level log-prob stats."""
         enc = self.encode(image, prompt)
         keep = select_visual_tokens(enc.image_mask, enc.visual, v_ratio, v_method)
-        first, cache, _, _ = self.prefill(enc, keep)
-        return self.decode(first, compress_kv_l2norm(cache, kv_ratio), enc.next_position, max_new_tokens)[0]
+        pre = self.prefill(enc, keep)
+        dec = self.decode(pre, compress_kv_l2norm(pre.cache, kv_ratio), enc.next_position, max_new_tokens)
+        return dec.text, confidence_record(pre, dec)
 
     @torch.inference_mode()
     def sweep(self, sample: dict, v_ratios, v_methods, kv_ratios) -> dict:
@@ -121,17 +161,18 @@ class QwenVLRunner:
         results = []
         for method, vr in vconfigs:
             keep = select_visual_tokens(enc.image_mask, enc.visual, vr, "uniform" if method == "full" else method)
-            first, base, seq_len, prefill_s = self.prefill(enc, keep)
+            pre = self.prefill(enc, keep)
             for kr in kv_ratios:
-                cache = compress_kv_l2norm(base, kr)
+                cache = compress_kv_l2norm(pre.cache, kr)
                 kv_len = cache.key_cache[0].shape[-2]
-                pred, n_new, decode_s = self.decode(first, cache, enc.next_position, max_new)
-                results.append(dict(v_method=method, v_ratio=vr, kv_ratio=kr, pred=pred,
-                                    score=scorer(pred, sample["answers"]),
-                                    n_vis_kept=int(keep[enc.image_mask].sum()), seq_len=seq_len, kv_len=kv_len,
-                                    prefill_s=round(prefill_s, 4), decode_s=round(decode_s, 4), n_new=n_new))
+                dec = self.decode(pre, cache, enc.next_position, max_new)
+                results.append(dict(v_method=method, v_ratio=vr, kv_ratio=kr, pred=dec.text,
+                                    score=scorer(dec.text, sample["answers"]),
+                                    n_vis_kept=int(keep[enc.image_mask].sum()), seq_len=pre.seq_len, kv_len=kv_len,
+                                    prefill_s=round(pre.seconds, 4), decode_s=round(dec.seconds, 4),
+                                    n_new=dec.n_tokens, **confidence_record(pre, dec)))
                 del cache
-            del base
+            del pre
         return dict(id=sample["id"], dataset=sample["dataset"], answers=list(sample["answers"]),
                     category=sample.get("category"), n_vis=int(enc.image_mask.sum()),
                     seq_len=int(enc.image_mask.numel()), encode_s=round(enc.timings["encode_s"], 4),

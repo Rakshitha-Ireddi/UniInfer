@@ -12,7 +12,7 @@ then learns to spend a fixed memory budget where it matters.*
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11-blue)
 ![Status](https://img.shields.io/badge/status-v0.1%20research%20preview-orange)
 
-[Results](#results-v01) · [How it works](#how-it-works) · [Quickstart](#quickstart) · [Reproduce](#reproduce-the-paper-numbers) · [Roadmap](ROADMAP.md) · [Design decisions](docs/adr/README.md) · [Contributing](CONTRIBUTING.md)
+[Results](#results-v01) · [v0.2](#results-v02-confidence-cascades) · [How it works](#how-it-works) · [Quickstart](#quickstart) · [Reproduce](#reproduce-the-paper-numbers) · [Roadmap](ROADMAP.md) · [Design decisions](docs/adr/README.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -73,6 +73,31 @@ does about as well. Most of today's gain comes from moving memory *between task 
 remaining gap to the oracle with *per-request* signals is the open research problem, and it drives
 [v0.2](ROADMAP.md).
 
+## Results (v0.2): confidence cascades
+
+Can the model's own confidence tell us *which* requests a cheap config damaged? Answer cheaply, and
+escalate to a larger budget only when unsure. Full write-up:
+[`experiments/cascade/`](experiments/cascade/README.md).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/cascade_frontier_dark.png">
+  <img alt="Two panels: under sum cost, the cascade with real confidence matches a shuffled-confidence control; under max cost, it beats the control" src="docs/figures/cascade_frontier_light.png">
+</picture>
+
+**Finding 4: the per-request signal exists.** The minimum token log-prob of the answer separates kept
+answers from damaged ones with **AUROC 0.85**. First-token confidence, the usual cascade signal, is at
+chance on DocVQA (0.49).
+
+**Finding 5: but it does not pay for itself when retries cost double.** A per-task cascade beats task-aware
+allocation at 15% memory (+3.3 points, 95% CI [+1.1, +5.6]). However, **the same cascade with confidence
+shuffled across requests does just as well**. The gain comes from mixing two configs per task, not from
+the signal.
+
+**Finding 6: confidence pays off once a retry is cheap.** If the cheap attempt's memory is freed before
+the retry, real confidence beats the shuffled control by **+1.4 to +3.2 points** at 3 of 4 budgets
+(paired bootstrap CIs exclude 0), and beats task-aware allocation by up to +4.8. The bottleneck is
+*escalation cost*, which makes cheap re-compression of a retained cache a v0.3 serving problem.
+
 ### What compression looks like on one request
 
 ```text
@@ -103,6 +128,7 @@ flowchart LR
 | Visual tokens | [`uniinfer.compression.select_visual_tokens`](src/uniinfer/compression/visual_tokens.py) | `uniform`, `dissim` (drop redundant/background patches) |
 | KV cache | [`uniinfer.compression.compress_kv_l2norm`](src/uniinfer/compression/kv_cache.py) | Attention-free L2-norm eviction; keeps sinks and question tail |
 | Selector | [`uniinfer.controller.BudgetedSelector`](src/uniinfer/controller/selector.py) | Gradient-boosted quality predictor plus Lagrangian budget allocation ([ADR-0005](docs/adr/0005-cost-model-and-budgeted-selection.md)) |
+| Cascade | [`uniinfer.controller.fit_group_cascades`](src/uniinfer/controller/cascade.py) | Per-task confidence cascades under one shared budget ([ADR-0008](docs/adr/0008-confidence-cascade.md)) |
 | Metrics | [`uniinfer.metrics`](src/uniinfer/metrics.py) | VQA accuracy, ANLS, multiple-choice accuracy |
 
 ## Quickstart
@@ -156,7 +182,9 @@ src/uniinfer/          installable library
   controller/          budgeted per-request config selection
   metrics.py data.py   task metrics, benchmark loaders and prompts
 experiments/oracle/    v0.1 study: sweep -> features -> analyze -> predictor -> figures
+experiments/cascade/   v0.2 study: confidence cascades, shuffled control, paired tests
 results/v0.1-oracle/   committed raw results + reports (reproducible on CPU)
+results/v0.2-cascade/  same requests + per-config confidence
 docs/adr/              architecture decision records
 docs/figures/          README figures (light + dark)
 scripts/               environment setup, smoke test
@@ -177,7 +205,7 @@ tests/                 CPU unit tests (run in CI)
 | Version | Theme | Status |
 |---|---|---|
 | **v0.1** | Oracle study plus first learned selector | ✅ released |
-| **v0.2** | Close the oracle gap with per-request signals; strong baselines; second VLM | 🚧 next |
+| **v0.2** | Close the oracle gap with per-request signals; strong baselines; second VLM | 🚧 cascade study done |
 | **v0.3** | Serving: batched decode with heterogeneous budgets, vLLM integration, throughput under memory caps | 📋 planned |
 | **v0.4** | Compression foundation: INT4/INT8 weights (AWQ/GPTQ), KV quantization, Triton kernels | 📋 planned |
 | **v1.0** | Benchmark suite plus paper | 📋 planned |

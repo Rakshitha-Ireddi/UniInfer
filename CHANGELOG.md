@@ -11,10 +11,23 @@ versions follow [SemVer](https://semver.org/).
   2000 replicates in about 2 s via resampling-count matrices (#4).
 - `experiments/oracle/analyze.py`: 95% CIs for static / per-task / oracle and the oracle-static gap
   (`--n-boot`, `--seed`).
+- Confidence signals from greedy logits (`uniinfer.signals`), stored for every config by the sweep, and
+  `QwenVLRunner.run_with_confidence` (#6).
+- `uniinfer.controller.cascade`: `Cascade`, `simulate`, `fit_cascade` (vectorized exhaustive search),
+  `cascade_frontier`, and `fit_group_cascades` / `simulate_groups` (one cascade per task under one shared
+  budget, exact frontier merge) (#6).
+- `experiments/cascade`: evaluation harness with AUROC, held-out comparisons, a shuffled-confidence control,
+  paired bootstrap tests, and figures. Results in `results/v0.2-cascade`. ADR-0008.
+- ChartQA loader (content-hash ids) and relaxed-accuracy metric (#3).
 
 ### Findings
 - The oracle-static gap is significant at every budget (e.g. +0.217 [0.180, 0.252] at 25% memory).
   Per-task static configs are **not** significantly better than one static config (CIs overlap).
+- Answer-level log-prob detects compression damage (AUROC 0.845). When failed attempts are paid for, a
+  cascade's gain over task-aware allocation is matched by a shuffled-confidence control. When memory is
+  freed before a retry, real confidence adds +1.4 to +3.2 points (significant at 3 of 4 budgets).
+- Cross-GPU check: the v0.2 sweep (RTX 3090) reproduces 95.6% of v0.1 predictions (A5000). Mean scores
+  agree to within 0.007.
 
 ## [0.1.0] - 2026-11-10
 
