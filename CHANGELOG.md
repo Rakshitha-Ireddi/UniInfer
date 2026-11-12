@@ -5,6 +5,17 @@ versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `uniinfer.stats`: stratified request bootstrap (`bootstrap_ci`, `paired_diff`) and replicate-level
+  re-selection of the best static config and the oracle (`best_static_replicates`, `oracle_replicates`).
+  2000 replicates in about 2 s via resampling-count matrices (#4).
+- `experiments/oracle/analyze.py`: 95% CIs for static / per-task / oracle and the oracle-static gap
+  (`--n-boot`, `--seed`).
+
+### Findings
+- The oracle-static gap is significant at every budget (e.g. +0.217 [0.180, 0.252] at 25% memory).
+  Per-task static configs are **not** significantly better than one static config (CIs overlap).
+
 ## [0.1.0] - 2026-11-10
 
 ### Added

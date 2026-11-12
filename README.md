@@ -41,8 +41,10 @@ Qwen2.5-VL-3B · 450 requests (150 each from TextVQA, DocVQA and MMBench) · 28 
 </picture>
 
 **Finding 1: the headroom is large.** A per-request oracle keeps **full quality (0.855) at 15% of the KV
-memory**. The best single static config scores 0.536 at that budget. This is a luck-free upper bound:
-no credit is given when a compressed config beats the uncompressed model.
+memory**. The best single static config scores 0.536 at that budget, a gap of **+0.316 (95% CI
+[0.280, 0.341])**. This is a luck-free upper bound: no credit is given when a compressed config beats the
+uncompressed model. CIs come from a stratified request bootstrap that re-selects every config inside each
+replicate (`python experiments/oracle/analyze.py`).
 
 **Finding 2: requests differ, and by task.** At 25% memory, every MMBench request and 91% of TextVQA
 requests keep their full-quality answer, but only 65% of DocVQA requests do.
