@@ -1,6 +1,7 @@
 """Benchmark loaders (streamed from the Hugging Face Hub) with the prompts used in all experiments."""
 from __future__ import annotations
 
+import hashlib
 import math
 from collections.abc import Iterator
 
@@ -11,12 +12,24 @@ DATASETS = {
     "textvqa": ("lmms-lab/textvqa", None, "validation"),
     "docvqa": ("lmms-lab/DocVQA", "DocVQA", "validation"),
     "mmbench": ("lmms-lab/MMBench", "en", "dev"),
+    "chartqa": ("lmms-lab/ChartQA", None, "test"),
 }
-MAX_NEW_TOKENS = {"textvqa": 16, "docvqa": 24, "mmbench": 4}
+MAX_NEW_TOKENS = {"textvqa": 16, "docvqa": 24, "mmbench": 4, "chartqa": 16}
 
 
 def _missing(x) -> bool:
     return x is None or (isinstance(x, float) and math.isnan(x)) or str(x).strip().lower() == "nan"
+
+
+def content_id(question: str, image) -> str:
+    """Stable id for datasets without one (ChartQA): hash of the question and the image pixels.
+
+    Independent of stream order, so resumed and repeated sweeps line up request-by-request.
+    """
+    h = hashlib.sha1(question.encode("utf-8"))
+    h.update(f"{image.size}".encode())
+    h.update(image.tobytes())
+    return h.hexdigest()[:12]
 
 
 def build_mc_prompt(row: dict) -> str:
@@ -41,6 +54,10 @@ def iter_samples(name: str, n: int, seed: int = 0, buffer_size: int = 1000) -> I
         elif name == "docvqa":
             yield dict(id=f"docvqa-{r['questionId']}", dataset=name, image=img,
                        prompt=r["question"] + SHORT_ANSWER, answers=r["answers"])
+        elif name == "chartqa":
+            # `type` is human_test (human-written) or augmented_test (template-generated)
+            yield dict(id=f"chartqa-{content_id(r['question'], img)}", dataset=name, image=img,
+                       prompt=r["question"] + SHORT_ANSWER, answers=[r["answer"]], category=r.get("type"))
         else:
             yield dict(id=f"mmbench-{r['index']}", dataset=name, image=img, prompt=build_mc_prompt(r),
                        answers=[r["answer"]], category=r.get("category"))
