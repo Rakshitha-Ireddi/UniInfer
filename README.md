@@ -12,7 +12,7 @@ then learns to spend a fixed memory budget where it matters.*
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11-blue)
 ![Status](https://img.shields.io/badge/status-v0.1%20research%20preview-orange)
 
-[Results](#results-v01) · [v0.2](#results-v02-confidence-cascades) · [How it works](#how-it-works) · [Quickstart](#quickstart) · [Reproduce](#reproduce-the-paper-numbers) · [Roadmap](ROADMAP.md) · [Design decisions](docs/adr/README.md) · [Contributing](CONTRIBUTING.md)
+[Results](#results-v01) · [v0.2 cascades](#results-v02-confidence-cascades) · [v0.2 baselines](#results-v02-strong-baselines) · [How it works](#how-it-works) · [Quickstart](#quickstart) · [Reproduce](#reproduce-the-paper-numbers) · [Roadmap](ROADMAP.md) · [Design decisions](docs/adr/README.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -45,6 +45,10 @@ memory**. The best single static config scores 0.536 at that budget, a gap of **
 [0.280, 0.341])**. This is a luck-free upper bound: no credit is given when a compressed config beats the
 uncompressed model. CIs come from a stratified request bootstrap that re-selects every config inside each
 replicate (`python experiments/oracle/analyze.py`).
+
+> **Update (v0.2 baselines):** most of this headroom comes from the weak v0.1 KV operator. With SnapKV in the
+> grid, the best static config keeps full quality down to 25% memory and the gap at 15% shrinks to +0.026.
+> Headroom remains at 10% memory and below. See [Findings 7–9](#results-v02-strong-baselines).
 
 **Finding 2: requests differ, and by task.** At 25% memory, every MMBench request and 91% of TextVQA
 requests keep their full-quality answer, but only 65% of DocVQA requests do.
@@ -107,6 +111,37 @@ visual  50%  kv  50%  ->  "...a red circle and a blue circle. The invoice total 
 visual  25%  kv  25%  ->  "The image shows a handwritten note with the following details:"
 ```
 
+## Results (v0.2): strong baselines
+
+Does the headroom survive a stronger static operator? We add **SnapKV** (KV eviction) and **FastV-style**
+visual pruning, both guided by attention that we rebuild on SDPA and verify layer by layer
+([ADR-0009](docs/adr/0009-attention-guided-baselines.md)). Same 450 requests, now 100 configs each. Full
+write-up: [`experiments/baselines/`](experiments/baselines/README.md).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/headroom_operators_dark.png">
+  <img alt="Best static score and per-request oracle per budget, for v0.1 operators and with SnapKV and FastV-style operators added" src="docs/figures/headroom_operators_light.png">
+</picture>
+
+**Finding 7: SnapKV removes most of the v0.1 headroom.** On its own, SnapKV keeps 0.850 of 0.855 at 25% of
+the KV cache, where L2-norm eviction drops to 0.590. With it, the oracle-static gap is **+0.005 at 25% memory**
+(it was +0.217) and **+0.026 [+0.015, +0.061] at 15%** (it was +0.316). FastV-style pruning helps only at
+mild pruning.
+
+**Finding 8: the headroom moves to extreme compression.** Below about 10% memory SnapKV breaks on TextVQA
+and DocVQA but not on MMBench (unchanged even at 5%). The oracle still reaches full quality, so the gap
+grows again: **+0.085 [+0.038, +0.105] at 10%** and **+0.176 [+0.146, +0.209] at 5%**.
+
+**Finding 9: task-aware allocation only pays off there.** Held out, it is 1.3 to 1.6 points *worse* than
+one static SnapKV config at 25% memory and above, and better at 10% (+0.024 [+0.011, +0.039]) and 7.5%
+(+0.089 [+0.063, +0.117], partly a grid effect). Per-request methods must now be judged against SnapKV, at
+≤10% memory.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/allocation_operators_dark.png">
+  <img alt="Held-out gain of task-aware allocation over the best static config with paired 95% CIs, per budget" src="docs/figures/allocation_operators_light.png">
+</picture>
+
 ## How it works
 
 ```mermaid
@@ -160,6 +195,11 @@ pip install -e ".[experiments]"
 python experiments/oracle/analyze.py        # oracle vs static vs per-task  (CPU, seconds)
 python experiments/oracle/predictor.py      # learned selectors, 5-fold CV  (CPU, minutes)
 python experiments/oracle/make_figures.py   # README figures
+python experiments/cascade/run_cascade.py   # v0.2 cascades
+python experiments/baselines/analyze.py \
+    --extra results/v0.2-baselines-low/oracle_sweep.jsonl \
+    --out results/v0.2-baselines-low/baselines_results.json   # v0.2 baselines (CPU, about 2 min)
+python experiments/baselines/make_figures.py
 ```
 
 Regenerate the raw results on a GPU (about 25 min for the sweep, 3 min for features, on one A5000):
@@ -183,8 +223,10 @@ src/uniinfer/          installable library
   metrics.py data.py   task metrics, benchmark loaders and prompts
 experiments/oracle/    v0.1 study: sweep -> features -> analyze -> predictor -> figures
 experiments/cascade/   v0.2 study: confidence cascades, shuffled control, paired tests
+experiments/baselines/ v0.2 study: SnapKV and FastV-style baselines vs the oracle
 results/v0.1-oracle/   committed raw results + reports (reproducible on CPU)
 results/v0.2-cascade/  same requests + per-config confidence
+results/v0.2-baselines*/ same requests x 100 configs with attention-guided operators
 docs/adr/              architecture decision records
 docs/figures/          README figures (light + dark)
 scripts/               environment setup, smoke test
@@ -194,8 +236,9 @@ tests/                 CPU unit tests (run in CI)
 ## Limitations (read before citing)
 
 - One model (Qwen2.5-VL-3B), 150 requests per dataset, greedy decoding, batch size 1.
-- Compression operators are simple placeholders. FastV, SparseVLM, SnapKV and PyramidKV baselines come
-  next ([ADR-0004](docs/adr/0004-compression-operators.md)).
+- v0.1 and the v0.2 cascade study use simple operators. With SnapKV the headroom at ≥15% memory mostly
+  disappears (Findings 7–9). FastV is a pre-prefill variant; SparseVLM, VisionZip, PyramidKV and Ada-KV
+  are not yet tested.
 - Cost is relative KV memory. At batch 1 the weights dominate peak VRAM, so the memory benefit has to be
   shown under concurrent serving or long contexts (v0.3).
 - Latency was measured on shared GPUs and is diagnostic only.
@@ -205,7 +248,7 @@ tests/                 CPU unit tests (run in CI)
 | Version | Theme | Status |
 |---|---|---|
 | **v0.1** | Oracle study plus first learned selector | ✅ released |
-| **v0.2** | Close the oracle gap with per-request signals; strong baselines; second VLM | 🚧 cascade study done |
+| **v0.2** | Close the oracle gap with per-request signals; strong baselines; second VLM | 🚧 cascades and SnapKV/FastV baselines done |
 | **v0.3** | Serving: batched decode with heterogeneous budgets, vLLM integration, throughput under memory caps | 📋 planned |
 | **v0.4** | Compression foundation: INT4/INT8 weights (AWQ/GPTQ), KV quantization, Triton kernels | 📋 planned |
 | **v1.0** | Benchmark suite plus paper | 📋 planned |

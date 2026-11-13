@@ -13,11 +13,15 @@ RESULTS = Path(os.environ.get("UNIINFER_RESULTS", REPO / "results" / "v0.1-oracl
 V_RATIOS = [1.0, 0.75, 0.5, 0.25]
 V_METHODS = ["uniform", "dissim"]
 KV_RATIOS = [1.0, 0.75, 0.5, 0.25]
+KV_METHODS = ["l2norm"]
 BUDGETS = [0.5, 0.375, 0.25, 0.15]
 
 
 def config_key(c: dict) -> str:
-    return f"{c['v_method']}@{c['v_ratio']:.2f}|kv@{c['kv_ratio']:.2f}"
+    """e.g. 'dissim@0.50|kv@0.25'. Non-default KV methods are named: 'attn@0.50|snapkv@0.25'."""
+    km = c.get("kv_method", "l2norm")
+    kv = "kv" if km == "l2norm" or c["kv_ratio"] >= 1.0 else km
+    return f"{c['v_method']}@{c['v_ratio']:.2f}|{kv}@{c['kv_ratio']:.2f}"
 
 
 def load_sweep(path: str | Path = RESULTS / "oracle_sweep.jsonl"):
@@ -32,9 +36,16 @@ def load_sweep(path: str | Path = RESULTS / "oracle_sweep.jsonl"):
 
 
 def config_descriptors(recs) -> np.ndarray:
+    """Per-config features for the selector. Method flags for attention-guided methods are added only when the
+    sweep contains them, so v0.1/v0.2 descriptors (and results) are unchanged."""
+    cfgs = recs[0]["configs"]
+    extra_v = [m for m in ("attn",) if any(c["v_method"] == m for c in cfgs)]
+    extra_k = [m for m in ("snapkv",) if any(c.get("kv_method") == m for c in cfgs)]
     return np.array([[c["v_ratio"], c["kv_ratio"], c["v_ratio"] * c["kv_ratio"],
                       float(c["v_method"] == "uniform"), float(c["v_method"] == "dissim")]
-                     for c in recs[0]["configs"]], np.float32)
+                     + [float(c["v_method"] == m) for m in extra_v]
+                     + [float(c.get("kv_method", "l2norm") == m and c["kv_ratio"] < 1.0) for m in extra_k]
+                     for c in cfgs], np.float32)
 
 
 def oracle_score(S: np.ndarray, C: np.ndarray, budget: float) -> float:

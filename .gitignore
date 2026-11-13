@@ -35,3 +35,4 @@ Thumbs.db
 
 # dry-run outputs of experiments/cascade/run_cascade.py
 results/**/_dryrun*
+results/**/merged_sweep.jsonl

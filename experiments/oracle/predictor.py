@@ -16,10 +16,10 @@ from sklearn.model_selection import KFold
 from uniinfer.controller import BudgetedSelector, best_static_config
 
 
-def evaluate(S, C, ds, X, desc, folds, seed):
+def evaluate(S, C, ds, X, desc, folds, seed, budgets=BUDGETS):
     """Held-out (score, cost) arrays per budget for static, per-task and (if X given) the selector."""
     N = len(S)
-    res = {m: {B: [np.zeros(N), np.zeros(N)] for B in BUDGETS} for m in ["static", "per-task", "selector"]}
+    res = {m: {B: [np.zeros(N), np.zeros(N)] for B in budgets} for m in ["static", "per-task", "selector"]}
 
     def put(method, B, rows, j):
         res[method][B][0][rows] = S[rows, j]
@@ -27,7 +27,7 @@ def evaluate(S, C, ds, X, desc, folds, seed):
 
     for tr, te in KFold(folds, shuffle=True, random_state=seed).split(S):
         sel = BudgetedSelector(desc, seed=seed).fit(X[tr], S[tr], C[tr]) if X is not None else None
-        for B in BUDGETS:
+        for B in budgets:
             put("static", B, te, best_static_config(S[tr], C[tr], B))
             for d in np.unique(ds):
                 trd, ted = tr[ds[tr] == d], te[ds[te] == d]
