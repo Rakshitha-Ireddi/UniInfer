@@ -30,8 +30,15 @@ The central research question: **what cheap signal tells us, before answering, t
   mass as a fragility signal (cost ≪ full prefill, unlike T3).
 - 📋 **OCR-density and fine-detail signals.** Text-region density, edge energy and resolution vs question type.
 - 📋 **Direct "cheapest safe config" classification** instead of score regression; calibration analysis.
-- 📋 **Strong compression baselines:** FastV, SparseVLM, VisionZip (visual); SnapKV, PyramidKV, Ada-KV (KV).
-  Re-run the oracle with them. Does the headroom survive better operators?
+- ✅ **Strong compression baselines: SnapKV and FastV-style** ([results](experiments/baselines/README.md)).
+  Attention is rebuilt on SDPA (ADR-0009, gated by `--check-attn`). SnapKV removes most of the headroom at
+  ≥15% memory; the gap survives at ≤10% (+0.085 to +0.176). **Every per-request method from here on is
+  evaluated with SnapKV in the grid, at 10% memory and below.**
+- 📋 **More baselines:** PyramidKV and Ada-KV (per-layer / per-head budgets, the static analogue of what we
+  allocate per request), SparseVLM, VisionZip, exact mid-forward FastV.
+- 📋 **Finer low budgets:** SnapKV at 2–10% in 1-point steps, to remove the grid effect seen at 7.5%.
+- 📋 **Re-run cascades with SnapKV:** does answer confidence still detect damage at 5–10% KV, and does it beat
+  the shuffled control there?
 - 📋 **Scale and generalize:** 500+ requests per dataset, plus ChartQA, InfoVQA and MathVista; second VLM
   (LLaVA-OneVision or InternVL); a 7B model.
 - ✅ **Statistics:** bootstrap CIs in `analyze.py` (#4); paired tests vs task-aware and a shuffled control for cascades.

@@ -1,0 +1,80 @@
+merged 450 requests from C:\Users\iredd\Desktop\My Projects\Project 8\results\v0.2-baselines\oracle_sweep.jsonl + results/v0.2-baselines-low/oracle_sweep.jsonl
+samples: 450 (docvqa=150, mmbench=150, textvqa=150), configs: 100
+
+=== 1. Operators on their own (luck-free mean score; uncompressed in the first row) ===
+  operator                        all   docvqa  mmbench  textvqa
+  uncompressed                  0.855    0.912    0.847    0.804
+  visual uniform keep 0.75      0.824    0.848    0.833    0.791
+  visual uniform keep 0.50      0.786    0.779    0.827    0.751
+  visual uniform keep 0.25      0.620    0.445    0.813    0.602
+  visual dissim  keep 0.75      0.834    0.871    0.833    0.798
+  visual dissim  keep 0.50      0.799    0.800    0.813    0.784
+  visual dissim  keep 0.25      0.689    0.575    0.760    0.731
+  visual attn    keep 0.75      0.842    0.888    0.840    0.798
+  visual attn    keep 0.50      0.793    0.765    0.833    0.782
+  visual attn    keep 0.25      0.680    0.520    0.780    0.740
+  KV     l2norm  keep 0.75      0.819    0.812    0.847    0.798
+  KV     l2norm  keep 0.50      0.709    0.648    0.847    0.633
+  KV     l2norm  keep 0.25      0.590    0.418    0.847    0.507
+  KV     snapkv  keep 0.75      0.852    0.912    0.847    0.798
+  KV     snapkv  keep 0.50      0.855    0.912    0.847    0.804
+  KV     snapkv  keep 0.25      0.850    0.898    0.847    0.804
+  KV     snapkv  keep 0.15      0.829    0.878    0.847    0.762
+  KV     snapkv  keep 0.10      0.804    0.852    0.847    0.713
+  KV     snapkv  keep 0.05      0.679    0.702    0.847    0.487
+
+=== 2. Oracle headroom per operator family (luck-free; 95% CI, 2000 stratified replicates) ===
+  v0.1 operators (uniform/dissim + L2-norm)  (28 configs)
+    B=0.500  static 0.750 [0.713, 0.787]  oracle 0.855  gap +0.104 [+0.079, +0.129]   static = dissim@0.50|kv@0.75
+    B=0.375  static 0.689 [0.647, 0.731]  oracle 0.855  gap +0.166 [+0.132, +0.197]   static = dissim@0.25|kv@1.00
+    B=0.250  static 0.638 [0.594, 0.679]  oracle 0.855  gap +0.217 [+0.180, +0.252]   static = dissim@0.25|kv@0.75
+    B=0.150  static 0.536 [0.501, 0.581]  oracle 0.852  gap +0.316 [+0.280, +0.341]   static = dissim@0.50|kv@0.25
+    B=0.100  static 0.465 [0.427, 0.505]  oracle 0.701  gap +0.236 [+0.185, +0.253]   static = dissim@0.25|kv@0.25
+    B=0.075  infeasible (cheapest config costs 0.082)
+    B=0.050  infeasible (cheapest config costs 0.082)
+  + SnapKV  (70 configs)
+    B=0.500  static 0.855 [0.824, 0.885]  oracle 0.855  gap +0.000 [+0.000, +0.000]   static = full@1.00|snapkv@0.50
+    B=0.375  static 0.850 [0.819, 0.881]  oracle 0.855  gap +0.005 [+0.001, +0.009]   static = full@1.00|snapkv@0.25
+    B=0.250  static 0.850 [0.805, 0.879]  oracle 0.855  gap +0.005 [+0.002, +0.032]   static = full@1.00|snapkv@0.25
+    B=0.150  static 0.829 [0.778, 0.856]  oracle 0.855  gap +0.026 [+0.015, +0.063]   static = full@1.00|snapkv@0.15
+    B=0.100  static 0.767 [0.732, 0.828]  oracle 0.855  gap +0.088 [+0.038, +0.110]   static = dissim@0.75|snapkv@0.10
+    B=0.075  static 0.679 [0.639, 0.719]  oracle 0.855  gap +0.176 [+0.146, +0.207]   static = full@1.00|snapkv@0.05
+    B=0.050  static 0.679 [0.637, 0.718]  oracle 0.855  gap +0.176 [+0.146, +0.209]   static = full@1.00|snapkv@0.05
+  + FastV-style visual  (40 configs)
+    B=0.500  static 0.750 [0.718, 0.789]  oracle 0.855  gap +0.104 [+0.078, +0.125]   static = dissim@0.50|kv@0.75
+    B=0.375  static 0.689 [0.650, 0.732]  oracle 0.855  gap +0.166 [+0.132, +0.193]   static = dissim@0.25|kv@1.00
+    B=0.250  static 0.638 [0.599, 0.682]  oracle 0.855  gap +0.217 [+0.179, +0.245]   static = dissim@0.25|kv@0.75
+    B=0.150  static 0.536 [0.504, 0.582]  oracle 0.855  gap +0.319 [+0.280, +0.344]   static = dissim@0.50|kv@0.25
+    B=0.100  static 0.465 [0.431, 0.507]  oracle 0.719  gap +0.254 [+0.185, +0.268]   static = dissim@0.25|kv@0.25
+    B=0.075  infeasible (cheapest config costs 0.082)
+    B=0.050  infeasible (cheapest config costs 0.082)
+  all operators  (100 configs)
+    B=0.500  static 0.855 [0.824, 0.885]  oracle 0.855  gap +0.000 [+0.000, +0.000]   static = full@1.00|snapkv@0.50
+    B=0.375  static 0.850 [0.819, 0.881]  oracle 0.855  gap +0.005 [+0.001, +0.009]   static = full@1.00|snapkv@0.25
+    B=0.250  static 0.850 [0.808, 0.879]  oracle 0.855  gap +0.005 [+0.002, +0.027]   static = full@1.00|snapkv@0.25
+    B=0.150  static 0.829 [0.780, 0.856]  oracle 0.855  gap +0.026 [+0.015, +0.061]   static = full@1.00|snapkv@0.15
+    B=0.100  static 0.770 [0.737, 0.829]  oracle 0.855  gap +0.085 [+0.038, +0.105]   static = attn@0.75|snapkv@0.10
+    B=0.075  static 0.679 [0.639, 0.719]  oracle 0.855  gap +0.176 [+0.146, +0.207]   static = full@1.00|snapkv@0.05
+    B=0.050  static 0.679 [0.637, 0.718]  oracle 0.855  gap +0.176 [+0.146, +0.209]   static = full@1.00|snapkv@0.05
+
+=== 3. Held-out allocation (raw scores, 5-fold x 3 seeds)  score [realized cost] ===
+  v0.1 operators (uniform/ static            B=0.5: 0.763 [0.41]  B=0.375: 0.710 [0.33]  B=0.25: 0.659 [0.25]  B=0.15: 0.530 [0.14]  B=0.1: 0.484 [0.08]
+  v0.1 operators (uniform/ per-task static   B=0.5: 0.765 [0.42]  B=0.375: 0.722 [0.27]  B=0.25: 0.671 [0.22]  B=0.15: 0.563 [0.13]  B=0.1: 0.495 [0.08]
+  v0.1 operators (uniform/ task-aware        B=0.5: 0.816 [0.49]  B=0.375: 0.800 [0.37]  B=0.25: 0.722 [0.24]  B=0.15: 0.587 [0.15]  B=0.1: 0.516 [0.10]
+    task-aware - static  B=0.5: +0.053 [+0.029, +0.076]  P(<=0)=0.000
+    task-aware - static  B=0.375: +0.091 [+0.058, +0.121]  P(<=0)=0.000
+    task-aware - static  B=0.25: +0.063 [+0.037, +0.088]  P(<=0)=0.000
+    task-aware - static  B=0.15: +0.057 [+0.030, +0.084]  P(<=0)=0.000
+    task-aware - static  B=0.1: +0.032 [+0.013, +0.052]  P(<=0)=0.001
+  all operators            static            B=0.5: 0.858 [0.50]  B=0.375: 0.850 [0.25]  B=0.25: 0.849 [0.24]  B=0.15: 0.816 [0.13]  B=0.1: 0.776 [0.08]  B=0.075: 0.685 [0.05]  B=0.05: 0.685 [0.05]
+  all operators            per-task static   B=0.5: 0.854 [0.44]  B=0.375: 0.844 [0.23]  B=0.25: 0.846 [0.23]  B=0.15: 0.824 [0.13]  B=0.1: 0.772 [0.08]  B=0.075: 0.740 [0.06]  B=0.05: 0.667 [0.05]
+  all operators            task-aware        B=0.5: 0.842 [0.48]  B=0.375: 0.836 [0.37]  B=0.25: 0.836 [0.24]  B=0.15: 0.829 [0.15]  B=0.1: 0.800 [0.10]  B=0.075: 0.775 [0.07]  B=0.05: 0.678 [0.05]
+    task-aware - static  B=0.5: -0.016 [-0.028, -0.005]  P(<=0)=0.999
+    task-aware - static  B=0.375: -0.014 [-0.027, -0.002]  P(<=0)=0.990
+    task-aware - static  B=0.25: -0.013 [-0.024, -0.004]  P(<=0)=0.996
+    task-aware - static  B=0.15: +0.012 [-0.000, +0.026]  P(<=0)=0.029
+    task-aware - static  B=0.1: +0.024 [+0.011, +0.039]  P(<=0)=0.001
+    task-aware - static  B=0.075: +0.089 [+0.063, +0.117]  P(<=0)=0.000
+    task-aware - static  B=0.05: -0.008 [-0.022, +0.006]  P(<=0)=0.859
+
+wrote results\v0.2-baselines-low\baselines_results.json
