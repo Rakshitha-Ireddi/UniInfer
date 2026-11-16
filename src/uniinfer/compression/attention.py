@@ -9,6 +9,9 @@ verifies the reconstruction against the model's own attention output.
 * SnapKV (Li et al., 2024, "SnapKV: LLM Knows What You are Looking for Before Generation"): per layer and per
   KV head, keep the prefix tokens with the highest pooled attention from the observation window, plus the
   window itself.
+* PyramidKV (Cai et al., 2024, "PyramidKV: Dynamic KV Cache Compression based on Pyramidal Information
+  Funneling"): SnapKV selection, but lower layers keep more tokens than upper layers (an arithmetic
+  sequence). The average over layers equals the SnapKV budget, so the KV-memory cost is the same.
 * FastV-style (Chen et al., 2024, "An Image is Worth 1/2 Tokens After Layer 2"): rank image tokens by the
   attention they receive at layer 2. FastV drops them inside the forward pass after layer 2. Here they are
   dropped *before* prefill, so every layer's KV shrinks. That matches the KV-memory cost model (ADR-0005).
@@ -26,6 +29,7 @@ from transformers.cache_utils import DynamicCache
 WINDOW = 16       # observation window: question tail and generation prompt (matches kv_cache.KEEP_LAST)
 POOL = 7          # SnapKV max-pool kernel over the token axis
 FASTV_LAYER = 2   # FastV's default K
+PYRAMID_BETA = 20  # PyramidKV: the top layer keeps (average budget / beta), floored at the window
 
 
 def window_attention(q: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
@@ -62,8 +66,48 @@ def compress_kv_snapkv(cache: DynamicCache, queries: dict, ratio: float, window:
     """
     L = cache.key_cache[0].shape[-2]
     n_keep = L if ratio >= 1.0 else min(L, max(window, int(round(ratio * L))))
+    return _select_per_layer(cache, queries, [n_keep] * len(cache.key_cache), window, pool)
+
+
+def pyramid_budgets(n_layers: int, L: int, ratio: float, window: int = WINDOW, beta: float = PYRAMID_BETA) -> list:
+    """Per-layer token counts for PyramidKV: linear from bottom (most) to top (fewest), averaging ratio * L.
+
+    top = max(window, avg / beta), bottom = 2 * avg - top. If the bottom would exceed L, the extra is spread
+    over the other layers, so the average is preserved whenever ratio * L >= window.
+    """
+    if ratio >= 1.0:
+        return [L] * n_layers
+    avg = max(window, ratio * L)
+    top = max(window, avg / beta)
+    bottom = 2 * avg - top
+    raw = [bottom + (top - bottom) * i / max(1, n_layers - 1) for i in range(n_layers)]
+    n = [min(L, max(window, int(round(x)))) for x in raw]
+    target = int(round(avg * n_layers))
+    i = 0
+    while sum(n) < target and any(x < L for x in n):  # redistribute what the cap at L cut off, top-down
+        j = n_layers - 1 - (i % n_layers)
+        if n[j] < L:
+            n[j] += 1
+        i += 1
+    return n
+
+
+def compress_kv_pyramid(cache: DynamicCache, queries: dict, ratio: float, window: int = WINDOW,
+                        pool: int = POOL, beta: float = PYRAMID_BETA) -> DynamicCache:
+    """PyramidKV: SnapKV selection with per-layer budgets from `pyramid_budgets` (same average as SnapKV).
+    Layers then hold different numbers of tokens; decoding works because each layer attends only to its own
+    keys and the runtime passes explicit positions."""
+    L = cache.key_cache[0].shape[-2]
+    budgets = pyramid_budgets(len(cache.key_cache), L, ratio, window, beta)
+    return _select_per_layer(cache, queries, budgets, window, pool)
+
+
+def _select_per_layer(cache: DynamicCache, queries: dict, n_keep_per_layer: list, window: int,
+                      pool: int) -> DynamicCache:
+    L = cache.key_cache[0].shape[-2]
     out = DynamicCache()
     for li, (k, v) in enumerate(zip(cache.key_cache, cache.value_cache)):
+        n_keep = n_keep_per_layer[li]
         if n_keep >= L:
             out.update(k.clone(), v.clone(), li)
             continue
@@ -74,6 +118,12 @@ def compress_kv_snapkv(cache: DynamicCache, queries: dict, ratio: float, window:
         g = idx[..., None].expand(-1, -1, -1, k.shape[-1])
         out.update(k.gather(2, g).contiguous(), v.gather(2, g).contiguous(), li)
     return out
+
+
+def kv_tokens(cache: DynamicCache) -> float:
+    """KV tokens held per layer, averaged over layers (the KV-memory cost). An int when all layers match."""
+    n = [k.shape[-2] for k in cache.key_cache]
+    return n[0] if len(set(n)) == 1 else sum(n) / len(n)
 
 
 def visual_attention_scores(cache: DynamicCache, queries: dict, image_mask: torch.Tensor,

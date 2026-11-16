@@ -16,21 +16,36 @@ versions follow [SemVer](https://semver.org/).
   over the same requests, and three figure pairs. Results in `results/v0.2-baselines` (70 configs) and
   `results/v0.2-baselines-low` (30 low-ratio SnapKV configs; merged 100-config analysis). ADR-0009.
 - `sweep.py --v-ratios/--kv-ratios`; `predictor.evaluate(..., budgets=)`.
+- Fine SnapKV sweep (2–9% in 1-point steps; `results/v0.2-baselines-fine`, 149-config merged analysis).
+  `analyze.py --extra` takes several sweeps, `--budgets` sets the budget list.
+- `experiments/baselines/cascade_snapkv.py`: the v0.2 cascade study (real vs shuffled confidence, both cost
+  models, paired tests) on the SnapKV grid at tight budgets, CPU only. New figure `cascade_snapkv_*.png`.
+- PyramidKV (`compress_kv_pyramid`, `pyramid_budgets`, `kv_method="pyramid"`): SnapKV selection with a
+  per-layer budget pyramid (β = 20). `kv_tokens` counts KV cost as the length averaged over layers
+  (unchanged for every other operator).
+- `uniinfer.controller.group_frontiers` and `fit_group_cascades(..., fronts=)`: reuse per-task cascade
+  frontiers across budgets (identical results; 387 s → 242 s on the 100-config run).
 
 ### Verified
 - `--check-attn`: ATTENTION PASS (worst relative error 0.0117 over 36 layers × 6 samples, RTX A5000).
 - `--check`: EQUIVALENCE PASS with the modified prefill. The v0.1 analysis reproduces byte-for-byte.
-- Both baseline sweeps (RTX A5000) reproduce every shared prediction: 12600/12600 with v0.1 and 4500/4500
-  with each other.
+- All baseline sweeps (RTX A5000) reproduce every shared prediction: 12600/12600 with v0.1 and every
+  overlap between the new sweeps.
+- A flat pyramid (β = 1) reproduces SnapKV exactly (unit test). Decoding with per-layer KV lengths runs
+  without errors on the GPU.
 
 ### Findings
 - SnapKV keeps 0.850 of 0.855 at 25% KV (L2-norm: 0.590). With it, the oracle-static gap is +0.005 at 25%
   memory (was +0.217) and +0.026 [+0.015, +0.061] at 15% (was +0.316). Most of the v0.1 headroom came from
   the weak KV operator.
-- Headroom remains at tight budgets: +0.085 [+0.038, +0.105] at 10% and +0.176 [+0.146, +0.209] at 5%.
-  SnapKV breaks on TextVQA/DocVQA below 10%; MMBench is unchanged even at 5%.
-- Held-out task-aware allocation is 1.3–1.6 points worse than one static SnapKV config at ≥25% memory and
-  better at 10% (+0.024 [+0.011, +0.039]) and 7.5% (+0.089, partly a grid effect).
+- SnapKV has a cliff: DocVQA falls from 0.70 to 0.43 between 5% and 4% KV; MMBench is unchanged even at 2%.
+  The headroom comes back around the cliff: +0.176 [+0.146, +0.210] at 5%, +0.344 [+0.282, +0.366] at 4%.
+- Held-out task-aware allocation is about 1.3 points worse than one static SnapKV config at ≥25% memory and
+  +0.102 [+0.076, +0.127] better at 4% (MMBench moved to about 2% KV). Gains a coarse grid showed at 7.5–10%
+  mostly vanish with 1-point steps (+0.089 → +0.026 at 7.5%, +0.024 → +0.000 at 10%).
+- Cascades on the SnapKV grid: answer min log-prob still detects damage (AUROC 0.83). With memory freed
+  before a retry, real confidence beats the shuffled control at 15%, 7.5% and 5% (+0.021, +0.032, +0.037;
+  Holm-corrected) and reaches 0.728 at 5% vs 0.685 static. With retries paid in full, the effect is mixed.
 - FastV-style (pre-prefill) visual pruning helps only at 75% keep.
 
 ## [0.2.0] - 2026-11-12

@@ -27,7 +27,7 @@ def main():
     ap.add_argument("--max-pixels", type=int, default=1024 * 28 * 28)
     ap.add_argument("--out", default=str(RESULTS / "oracle_sweep.jsonl"))
     ap.add_argument("--v-methods", default=",".join(V_METHODS), help="e.g. uniform,dissim,attn")
-    ap.add_argument("--kv-methods", default=",".join(KV_METHODS), help="e.g. l2norm,snapkv")
+    ap.add_argument("--kv-methods", default=",".join(KV_METHODS), help="e.g. l2norm,snapkv,pyramid")
     ap.add_argument("--v-ratios", default=",".join(map(str, V_RATIOS)), help="visual keep ratios (1.0 = full)")
     ap.add_argument("--kv-ratios", default=",".join(map(str, KV_RATIOS)), help="KV keep ratios (1.0 = full)")
     ap.add_argument("--check", action="store_true", help="verify equivalence with HF generate(), then exit")

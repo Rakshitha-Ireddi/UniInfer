@@ -48,7 +48,8 @@ replicate (`python experiments/oracle/analyze.py`).
 
 > **Update (v0.2 baselines):** most of this headroom comes from the weak v0.1 KV operator. With SnapKV in the
 > grid, the best static config keeps full quality down to 25% memory and the gap at 15% shrinks to +0.026.
-> Headroom remains at 10% memory and below. See [Findings 7–9](#results-v02-strong-baselines).
+> The headroom comes back near SnapKV's cliff (+0.34 at 4% memory). See
+> [Findings 7–10](#results-v02-strong-baselines).
 
 **Finding 2: requests differ, and by task.** At 25% memory, every MMBench request and 91% of TextVQA
 requests keep their full-quality answer, but only 65% of DocVQA requests do.
@@ -114,9 +115,9 @@ visual  25%  kv  25%  ->  "The image shows a handwritten note with the following
 ## Results (v0.2): strong baselines
 
 Does the headroom survive a stronger static operator? We add **SnapKV** (KV eviction) and **FastV-style**
-visual pruning, both guided by attention that we rebuild on SDPA and verify layer by layer
-([ADR-0009](docs/adr/0009-attention-guided-baselines.md)). Same 450 requests, now 100 configs each. Full
-write-up: [`experiments/baselines/`](experiments/baselines/README.md).
+visual pruning (PyramidKV is running), all guided by attention that we rebuild on SDPA and verify layer by layer
+([ADR-0009](docs/adr/0009-attention-guided-baselines.md)). Same 450 requests, now 149 configs each, down to
+2% of the KV cache. Full write-up: [`experiments/baselines/`](experiments/baselines/README.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/figures/headroom_operators_dark.png">
@@ -128,18 +129,31 @@ the KV cache, where L2-norm eviction drops to 0.590. With it, the oracle-static 
 (it was +0.217) and **+0.026 [+0.015, +0.061] at 15%** (it was +0.316). FastV-style pruning helps only at
 mild pruning.
 
-**Finding 8: the headroom moves to extreme compression.** Below about 10% memory SnapKV breaks on TextVQA
-and DocVQA but not on MMBench (unchanged even at 5%). The oracle still reaches full quality, so the gap
-grows again: **+0.085 [+0.038, +0.105] at 10%** and **+0.176 [+0.146, +0.209] at 5%**.
+**Finding 8: SnapKV has a cliff, and the headroom comes back around it.** DocVQA falls from 0.70 to 0.43
+between 5% and 4% of the KV cache, while MMBench is unchanged even at 2%. The oracle still keeps full quality
+by giving MMBench's memory to the fragile requests, so the gap peaks at the cliff: **+0.176 [+0.146, +0.210]
+at 5%** and **+0.344 [+0.282, +0.366] at 4%**.
 
-**Finding 9: task-aware allocation only pays off there.** Held out, it is 1.3 to 1.6 points *worse* than
-one static SnapKV config at 25% memory and above, and better at 10% (+0.024 [+0.011, +0.039]) and 7.5%
-(+0.089 [+0.063, +0.117], partly a grid effect). Per-request methods must now be judged against SnapKV, at
-≤10% memory.
+**Finding 9: task-aware allocation pays off only near the cliff.** Held out, it is about 1.3 points *worse*
+than one static SnapKV config at 25% memory and above, and **+0.102 [+0.076, +0.127] better at 4%**, by
+moving MMBench to about 2% KV. Gains that a coarse grid suggested at 7.5–10% mostly vanish with 1-point
+SnapKV steps.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/figures/allocation_operators_dark.png">
   <img alt="Held-out gain of task-aware allocation over the best static config with paired 95% CIs, per budget" src="docs/figures/allocation_operators_light.png">
+</picture>
+
+**Finding 10: per-request confidence still helps, if retries are cheap.** Re-running the v0.2 cascades on
+the SnapKV grid (CPU only; the sweeps log confidence), the answer log-prob still detects damage (AUROC 0.83).
+When the cheap attempt's memory is freed before the retry, real confidence beats a shuffled-confidence
+control by **+2.1, +3.2 and +3.7 points at 15%, 7.5% and 5%** (all survive a Holm correction) and reaches
+0.728 at 5% memory, against 0.685 for static and 0.671 for task-aware allocation. When a failed attempt is
+paid in full, the effect is mixed. Cheap escalation (re-compressing a retained prefill KV) is the v0.3 target.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/cascade_snapkv_dark.png">
+  <img alt="Held-out score vs realized KV memory for static, task-aware, a confidence cascade and its shuffled control" src="docs/figures/cascade_snapkv_light.png">
 </picture>
 
 ## How it works
@@ -196,9 +210,12 @@ python experiments/oracle/analyze.py        # oracle vs static vs per-task  (CPU
 python experiments/oracle/predictor.py      # learned selectors, 5-fold CV  (CPU, minutes)
 python experiments/oracle/make_figures.py   # README figures
 python experiments/cascade/run_cascade.py   # v0.2 cascades
-python experiments/baselines/analyze.py \
-    --extra results/v0.2-baselines-low/oracle_sweep.jsonl \
-    --out results/v0.2-baselines-low/baselines_results.json   # v0.2 baselines (CPU, about 2 min)
+E="results/v0.2-baselines-low/oracle_sweep.jsonl results/v0.2-baselines-fine/oracle_sweep.jsonl"
+python experiments/baselines/analyze.py --extra $E \
+    --budgets 0.5,0.375,0.25,0.15,0.1,0.075,0.05,0.04,0.03,0.02 \
+    --out results/v0.2-baselines-fine/baselines_results.json   # v0.2 baselines (CPU, about 3 min)
+python experiments/baselines/cascade_snapkv.py --extra $E --budgets 0.15,0.1,0.075,0.05,0.04,0.03 \
+    --out results/v0.2-baselines-fine/cascade_snapkv          # cascades on the SnapKV grid (about 10 min)
 python experiments/baselines/make_figures.py
 ```
 
@@ -223,10 +240,10 @@ src/uniinfer/          installable library
   metrics.py data.py   task metrics, benchmark loaders and prompts
 experiments/oracle/    v0.1 study: sweep -> features -> analyze -> predictor -> figures
 experiments/cascade/   v0.2 study: confidence cascades, shuffled control, paired tests
-experiments/baselines/ v0.2 study: SnapKV and FastV-style baselines vs the oracle
+experiments/baselines/ v0.2 study: SnapKV, PyramidKV, FastV-style baselines; cascades on that grid
 results/v0.1-oracle/   committed raw results + reports (reproducible on CPU)
 results/v0.2-cascade/  same requests + per-config confidence
-results/v0.2-baselines*/ same requests x 100 configs with attention-guided operators
+results/v0.2-baselines*/ same requests x 149 configs with attention-guided operators
 docs/adr/              architecture decision records
 docs/figures/          README figures (light + dark)
 scripts/               environment setup, smoke test
@@ -236,9 +253,11 @@ tests/                 CPU unit tests (run in CI)
 ## Limitations (read before citing)
 
 - One model (Qwen2.5-VL-3B), 150 requests per dataset, greedy decoding, batch size 1.
-- v0.1 and the v0.2 cascade study use simple operators. With SnapKV the headroom at ≥15% memory mostly
-  disappears (Findings 7–9). FastV is a pre-prefill variant; SparseVLM, VisionZip, PyramidKV and Ada-KV
-  are not yet tested.
+- v0.1 and the first v0.2 cascade study use simple operators. With SnapKV the headroom at ≥15% memory
+  mostly disappears (Findings 7–10). FastV is a pre-prefill variant; SparseVLM, VisionZip and Ada-KV are
+  not yet tested.
+- Many budgets and comparisons are reported. Every one is shown with its CI, and the confidence signal was
+  fixed before the SnapKV cascade runs.
 - Cost is relative KV memory. At batch 1 the weights dominate peak VRAM, so the memory benefit has to be
   shown under concurrent serving or long contexts (v0.3).
 - Latency was measured on shared GPUs and is diagnostic only.
@@ -248,7 +267,7 @@ tests/                 CPU unit tests (run in CI)
 | Version | Theme | Status |
 |---|---|---|
 | **v0.1** | Oracle study plus first learned selector | ✅ released |
-| **v0.2** | Close the oracle gap with per-request signals; strong baselines; second VLM | 🚧 cascades and SnapKV/FastV baselines done |
+| **v0.2** | Close the oracle gap with per-request signals; strong baselines; second VLM | 🚧 cascades, strong baselines and cascades on SnapKV done |
 | **v0.3** | Serving: batched decode with heterogeneous budgets, vLLM integration, throughput under memory caps | 📋 planned |
 | **v0.4** | Compression foundation: INT4/INT8 weights (AWQ/GPTQ), KV quantization, Triton kernels | 📋 planned |
 | **v1.0** | Benchmark suite plus paper | 📋 planned |

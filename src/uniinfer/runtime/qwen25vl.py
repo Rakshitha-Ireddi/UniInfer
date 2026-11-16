@@ -18,7 +18,9 @@ from transformers.cache_utils import DynamicCache
 from ..compression import (
     WindowQueryCapture,
     compress_kv_l2norm,
+    compress_kv_pyramid,
     compress_kv_snapkv,
+    kv_tokens,
     select_visual_tokens,
     visual_attention_scores,
 )
@@ -135,10 +137,11 @@ class QwenVLRunner:
         """New compressed cache; `pre.cache` is left untouched so several settings can share one prefill."""
         if kv_method == "l2norm" or kv_ratio >= 1.0:
             return compress_kv_l2norm(pre.cache, kv_ratio)
-        if kv_method == "snapkv":
+        if kv_method in ("snapkv", "pyramid"):
             if pre.queries is None:
-                raise ValueError("snapkv needs prefill(..., capture=True)")
-            return compress_kv_snapkv(pre.cache, pre.queries, kv_ratio)
+                raise ValueError(f"{kv_method} needs prefill(..., capture=True)")
+            fn = compress_kv_snapkv if kv_method == "snapkv" else compress_kv_pyramid
+            return fn(pre.cache, pre.queries, kv_ratio)
         raise ValueError(f"unknown kv_method {kv_method!r}")
 
     def keep_mask(self, enc: Encoded, ratio: float, method: str, full: Prefill | None = None) -> torch.Tensor:
@@ -195,7 +198,7 @@ class QwenVLRunner:
             full = self.prefill(enc, torch.ones_like(enc.image_mask), capture=True)
         keep = self.keep_mask(enc, v_ratio, v_method, full)
         del full
-        pre = self.prefill(enc, keep, capture=kv_method == "snapkv" and kv_ratio < 1.0)
+        pre = self.prefill(enc, keep, capture=kv_method in ("snapkv", "pyramid") and kv_ratio < 1.0)
         dec = self.decode(pre, self.compress(pre, kv_method, kv_ratio), enc.next_position, max_new_tokens)
         return dec.text, confidence_record(pre, dec)
 
@@ -210,7 +213,7 @@ class QwenVLRunner:
         scorer, max_new = SCORERS[sample["dataset"]], MAX_NEW_TOKENS[sample["dataset"]]
         vconfigs = [("full", 1.0)] + [(m, r) for m in v_methods for r in v_ratios if r < 1.0]
         kconfigs = [(kv_methods[0], 1.0)] + [(km, r) for km in kv_methods for r in kv_ratios if r < 1.0]
-        capture = "snapkv" in kv_methods or "attn" in v_methods
+        capture = bool({"snapkv", "pyramid"} & set(kv_methods)) or "attn" in v_methods
         results, full = [], None
         for method, vr in vconfigs:
             keep = self.keep_mask(enc, vr, "uniform" if method == "full" else method, full)
@@ -219,7 +222,7 @@ class QwenVLRunner:
                 full = pre  # FastV-style scores come from the full-sequence prefill
             for km, kr in kconfigs:
                 cache = self.compress(pre, km, kr)
-                kv_len = cache.key_cache[0].shape[-2]
+                kv_len = kv_tokens(cache)
                 dec = self.decode(pre, cache, enc.next_position, max_new)
                 results.append(dict(v_method=method, v_ratio=vr, kv_method=km, kv_ratio=kr, pred=dec.text,
                                     score=scorer(dec.text, sample["answers"]),

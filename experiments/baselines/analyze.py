@@ -161,14 +161,18 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--seeds", type=int, default=3)
-    ap.add_argument("--extra", help="second sweep over the same requests to merge in (e.g. low SnapKV ratios)")
+    ap.add_argument("--extra", nargs="*", default=[],
+                    help="more sweeps over the same requests to merge in, in order (e.g. low SnapKV ratios)")
+    ap.add_argument("--budgets", help="comma-separated budgets (default: v0.1 budgets, plus 10/7.5/5%% with --extra)")
     ap.add_argument("--out", help="results JSON (default: baselines_results.json next to the sweep)")
     a = ap.parse_args()
-    budgets = list(BUDGETS)
-    if a.extra:
-        merged = Path(a.extra).with_name("merged_sweep.jsonl")
-        merge_sweeps(a.sweep, a.extra, merged)
-        a.sweep, budgets = str(merged), budgets + LOW_BUDGETS
+    budgets = list(BUDGETS) + (LOW_BUDGETS if a.extra else [])
+    if a.budgets:
+        budgets = [float(b) for b in a.budgets.split(",")]
+    for k, extra in enumerate(a.extra):
+        merged = Path(a.extra[-1]).with_name(f"merged_sweep{'' if k == len(a.extra) - 1 else k}.jsonl")
+        merge_sweeps(a.sweep, extra, merged)
+        a.sweep = str(merged)
     recs, keys, S_raw, C, ds = load_sweep(a.sweep)
     S = np.minimum(S_raw, S_raw[:, :1])
     names = np.unique(ds)

@@ -1,5 +1,5 @@
-"""Figures for the v0.2 baselines study (light and dark), from the merged analysis (70-config grid + low SnapKV
-ratios) in results/v0.2-baselines-low/baselines_results.json.
+"""Figures for the v0.2 baselines study (light and dark), from the merged analysis (70-config grid + low and fine
+SnapKV ratios, 149 configs) in results/v0.2-baselines-fine/baselines_results.json.
 
     python experiments/baselines/make_figures.py
 """
@@ -20,7 +20,7 @@ sys.path.insert(0, str(HERE.parent / "oracle"))
 from common import REPO  # noqa: E402
 from make_figures import THEMES, style  # noqa: E402
 
-RES = REPO / "results" / "v0.2-baselines-low"
+RES = REPO / "results" / "v0.2-baselines-fine"
 OUT = REPO / "docs" / "figures"
 DATASETS = {"textvqa": "TextVQA", "docvqa": "DocVQA", "mmbench": "MMBench"}
 
@@ -70,8 +70,9 @@ def fig_headroom(theme, t, res, out):
     hr = res["headroom"]
     fams = [("v0.1 operators (uniform/dissim + L2-norm)", "v0.1 operators", t["series"][0]),
             ("all operators", "+ SnapKV + FastV-style", t["series"][2])]
-    budgets = sorted(next(iter(hr.values())), key=float, reverse=True)
-    fig, ax = plt.subplots(figsize=(9.5, 5.0), dpi=160, facecolor=t["surface"])
+    budgets = [b for b in sorted(next(iter(hr.values())), key=float, reverse=True)
+               if any(not hr[f][b].get("infeasible") for f, _, _ in fams)]
+    fig, ax = plt.subplots(figsize=(11, 5.0), dpi=160, facecolor=t["surface"])
     style(ax, t)
     x = list(range(len(budgets)))
     for k, (fam, label, col) in enumerate(fams):
@@ -129,19 +130,52 @@ def fig_allocation(theme, t, res, out):
     plt.close(fig)
 
 
+def fig_cascade(theme, t, cas, out):
+    """Held-out score vs realized KV cost at tight budgets: static, task-aware, cascades (real vs shuffled)."""
+    tab = cas["table"]
+    rows = [("static", "Best static (SnapKV grid)", t["ink2"], "o", (0, (4, 2))),
+            ("task-aware selector", "Task-aware selector", t["series"][0], "s", "-"),
+            ("task-aware cascade (memory freed before retry)", "Confidence cascade (memory freed before retry)",
+             t["series"][2], "D", "-"),
+            ("same, SHUFFLED confidence", "Same cascade, shuffled confidence (control)", t["series"][1], "D",
+             (0, (1, 1.5)))]
+    fig, ax = plt.subplots(figsize=(8, 4.8), dpi=160, facecolor=t["surface"])
+    style(ax, t)
+    budgets = sorted(tab["oracle (luck-free)"], key=float)
+    ax.plot([float(b) * 100 for b in budgets], [tab["oracle (luck-free)"][b]["score"] for b in budgets],
+            color=t["ink"], lw=1.2, ls=":", label="Per-request oracle (luck-free)", zorder=2)
+    for key, label, col, mk, ls in rows:
+        r = tab[key]
+        x = [r[b]["cost"] * 100 for b in budgets]
+        ax.plot(x, [r[b]["score"] for b in budgets], color=col, lw=2, ls=ls, marker=mk, ms=5, mec=t["surface"],
+                mew=1.0, label=label, zorder=3)
+    ax.set_xlabel("Realized average KV memory (% of uncompressed)", color=t["ink2"], fontsize=10)
+    ax.set_ylabel("Held-out score", color=t["ink2"], fontsize=10)
+    ax.set_title(f"Cascades with SnapKV in the grid ({cas['n_configs']} configs, tight budgets)", color=t["ink"],
+                 fontsize=11, loc="left", pad=10)
+    _legend(ax, t, loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=2)
+    fig.tight_layout()
+    fig.savefig(out / f"cascade_snapkv_{theme}.png", facecolor=t["surface"])
+    plt.close(fig)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default=str(RES / "baselines_results.json"))
     ap.add_argument("--out", default=str(OUT))
     a = ap.parse_args()
     res = json.load(open(a.results))
+    cas_path = Path(a.results).with_name("cascade_snapkv.json")
+    cas = json.load(open(cas_path)) if cas_path.exists() else None
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     for theme, t in THEMES.items():
         fig_operators(theme, t, res, out)
         fig_headroom(theme, t, res, out)
         fig_allocation(theme, t, res, out)
-    print("wrote", sorted(p.name for p in out.glob("*operators*.png")))
+        if cas is not None:
+            fig_cascade(theme, t, cas, out)
+    print("wrote", sorted(p.name for p in out.glob("*.png") if "operators" in p.name or "snapkv" in p.name))
 
 
 if __name__ == "__main__":

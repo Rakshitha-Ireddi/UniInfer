@@ -5,7 +5,10 @@ import torch
 from transformers.cache_utils import DynamicCache
 
 from uniinfer.compression import (
+    compress_kv_pyramid,
     compress_kv_snapkv,
+    kv_tokens,
+    pyramid_budgets,
     select_visual_tokens,
     snapkv_scores,
     window_attention,
@@ -88,3 +91,34 @@ def test_attn_visual_selection_uses_scores():
     assert keep.tolist() == [True, False, True, False, True, True]   # top-2 scores: image tokens 2 and 4
     with pytest.raises(ValueError):
         select_visual_tokens(mask, torch.zeros(4, 3), 0.5, "attn")
+
+
+def test_pyramid_budgets_keep_the_average_and_decrease():
+    b = pyramid_budgets(36, 1000, 0.1)
+    assert sum(b) == 36 * 100                       # same average as SnapKV at 10%
+    assert all(x >= y for x, y in zip(b, b[1:]))    # bottom layers keep more
+    assert b[-1] == 16 and b[0] > 2 * 100 - 20      # top = max(window, avg / 20), bottom ~ 2 * avg - top
+    capped = pyramid_budgets(36, 300, 0.75)         # bottom would exceed L: the cut is redistributed
+    assert max(capped) == 300 and sum(capped) == round(0.75 * 300 * 36)
+    assert pyramid_budgets(4, 50, 1.0) == [50] * 4
+
+
+def test_pyramid_cache_has_per_layer_lengths_and_average_cost():
+    layers, Hkv, L, D = 6, 2, 200, 8
+    cache = _cache(layers, Hkv, L, D)
+    queries = {li: torch.randn(1, 4, 16, D) for li in range(layers)}
+    out = compress_kv_pyramid(cache, queries, ratio=0.25)
+    lens = [k.shape[-2] for k in out.key_cache]
+    assert lens == pyramid_budgets(layers, L, 0.25) and len(set(lens)) > 1
+    assert kv_tokens(out) == pytest.approx(0.25 * L)
+    assert kv_tokens(compress_kv_snapkv(cache, queries, 0.25)) == 50
+
+
+def test_flat_pyramid_is_snapkv():
+    """beta = 1 makes every layer's budget equal, so PyramidKV must reduce to SnapKV exactly."""
+    cache = _cache(4, 2, 120, 8, seed=3)
+    queries = {li: torch.randn(1, 4, 16, 8) for li in range(4)}
+    a = compress_kv_pyramid(cache, queries, ratio=0.3, beta=1.0)
+    b = compress_kv_snapkv(cache, queries, ratio=0.3)
+    assert all(torch.equal(x, y) for x, y in zip(a.key_cache, b.key_cache))
+    assert all(torch.equal(x, y) for x, y in zip(a.value_cache, b.value_cache))

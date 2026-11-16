@@ -142,17 +142,18 @@ def cascade_frontier(S: np.ndarray, C: np.ndarray, Q: np.ndarray, *, max_stages:
 
 
 def fit_group_cascades(S: np.ndarray, C: np.ndarray, Q: np.ndarray, groups: np.ndarray, budget: float,
-                       **kw) -> dict:
+                       fronts: dict | None = None, **kw) -> dict:
     """One cascade per group (e.g. task) under ONE shared average-cost budget.
 
     Each group contributes its training frontier. Frontiers are merged exactly (request-weighted sums,
     Pareto-pruned after each merge), and the best combination whose overall mean cost fits `budget` wins.
     Returns {group: Cascade}. Groups whose frontier cannot meet the budget jointly fall back to their
-    cheapest point.
+    cheapest point. Pass `fronts` (from `group_frontiers`) to reuse frontiers across budgets.
     """
     names = list(np.unique(groups))
     N = len(S)
-    fronts = {g: cascade_frontier(S[groups == g], C[groups == g], Q[groups == g], **kw) for g in names}
+    if fronts is None:
+        fronts = group_frontiers(S, C, Q, groups, **kw)
     # merged state: arrays of total (score*n, cost*n) and the per-group choice index for each point
     tot_s = np.array([0.0])
     tot_c = np.array([0.0])
@@ -169,6 +170,11 @@ def fit_group_cascades(S: np.ndarray, C: np.ndarray, Q: np.ndarray, groups: np.n
     ok = tot_c / N <= budget + 1e-9
     k = int(np.argmax(np.where(ok, tot_s, -np.inf))) if ok.any() else 0  # index 0 = cheapest combination
     return {g: fronts[g][choice[k, j]][2] for j, g in enumerate(names)}
+
+
+def group_frontiers(S: np.ndarray, C: np.ndarray, Q: np.ndarray, groups: np.ndarray, **kw) -> dict:
+    """Per-group cascade frontiers. They do not depend on the budget, so compute them once per training set."""
+    return {g: cascade_frontier(S[groups == g], C[groups == g], Q[groups == g], **kw) for g in np.unique(groups)}
 
 
 def simulate_groups(cascades: dict, S, C, Q, groups, cost_mode: str = "sum"):

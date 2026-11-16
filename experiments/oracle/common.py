@@ -40,7 +40,7 @@ def config_descriptors(recs) -> np.ndarray:
     sweep contains them, so v0.1/v0.2 descriptors (and results) are unchanged."""
     cfgs = recs[0]["configs"]
     extra_v = [m for m in ("attn",) if any(c["v_method"] == m for c in cfgs)]
-    extra_k = [m for m in ("snapkv",) if any(c.get("kv_method") == m for c in cfgs)]
+    extra_k = [m for m in ("snapkv", "pyramid") if any(c.get("kv_method") == m for c in cfgs)]
     return np.array([[c["v_ratio"], c["kv_ratio"], c["v_ratio"] * c["kv_ratio"],
                       float(c["v_method"] == "uniform"), float(c["v_method"] == "dissim")]
                      + [float(c["v_method"] == m) for m in extra_v]

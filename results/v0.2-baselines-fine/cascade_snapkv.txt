@@ -1,0 +1,87 @@
+merged 450 requests from C:\Users\iredd\Desktop\My Projects\Project 8\results\v0.2-baselines\oracle_sweep.jsonl + results/v0.2-baselines-low/oracle_sweep.jsonl
+merged 450 requests from results\v0.2-baselines-fine\merged_sweep0.jsonl + results/v0.2-baselines-fine/oracle_sweep.jsonl
+N=450 configs=149 budgets=[0.15, 0.1, 0.075, 0.05, 0.04, 0.03] signal='answer min logprob' folds=5 seeds=3
+
+=== 1. AUROC of answer min logprob for 'compressed config keeps the uncompressed score' ===
+  configs                   n    all   docvqa  mmbench  textvqa
+  L2-norm, all ratios      30  0.855    0.799    0.902    0.750
+  SnapKV, all ratios      109  0.821    0.787    0.876    0.728
+  SnapKV, keep <= 15%      79  0.828    0.773    0.897    0.703
+[77s] selectors done
+[278s] cascades (sum cost) done
+[609s] cascades (max cost) done
+
+=== 2. Held-out score [realized cost], raw scores, mean over seeds ===
+  method                                                    B=0.15           B=0.1         B=0.075          B=0.05          B=0.04          B=0.03
+  static                                             0.816 [0.132]   0.803 [0.092]   0.761 [0.070]   0.685 [0.050]   0.512 [0.037]   0.477 [0.029]
+  task-aware selector                                0.822 [0.145]   0.803 [0.097]   0.787 [0.073]   0.671 [0.047]   0.614 [0.039]   0.461 [0.028]
+  task-aware cascade (retry pays both)               0.839 [0.147]   0.818 [0.100]   0.783 [0.075]   0.688 [0.049]   0.637 [0.040]   0.491 [0.030]
+    same, SHUFFLED confidence                        0.821 [0.146]   0.813 [0.100]   0.774 [0.074]   0.707 [0.050]   0.634 [0.040]   0.480 [0.030]
+  task-aware cascade (memory freed before retry)     0.845 [0.146]   0.817 [0.098]   0.814 [0.074]   0.728 [0.050]   0.635 [0.040]   0.473 [0.030]
+    same, SHUFFLED confidence                        0.824 [0.145]   0.812 [0.098]   0.782 [0.074]   0.690 [0.050]   0.629 [0.040]   0.483 [0.030]
+  oracle (luck-free)                                         0.855           0.855           0.855           0.855           0.846           0.683
+
+=== 3. Paired differences (per-request, averaged over seeds; stratified bootstrap 95% CI) ===
+  cascade - task-aware selector (retry pays both)
+    B=0.15: +0.017 [+0.002, +0.033]  P(<=0)=0.017  cost diff +0.001
+    B=0.1: +0.015 [-0.004, +0.033]  P(<=0)=0.053  cost diff +0.003
+    B=0.075: -0.003 [-0.018, +0.010]  P(<=0)=0.694  cost diff +0.002
+    B=0.05: +0.018 [-0.002, +0.038]  P(<=0)=0.037  cost diff +0.002
+    B=0.04: +0.023 [+0.007, +0.039]  P(<=0)=0.004  cost diff +0.001
+    B=0.03: +0.030 [+0.013, +0.045]  P(<=0)=0.000  cost diff +0.002
+  cascade - SHUFFLED (retry pays both)
+    B=0.15: +0.018 [+0.004, +0.032]  P(<=0)=0.009  cost diff +0.001
+    B=0.1: +0.005 [-0.008, +0.019]  P(<=0)=0.239  cost diff +0.000
+    B=0.075: +0.009 [-0.007, +0.024]  P(<=0)=0.140  cost diff +0.000
+    B=0.05: -0.019 [-0.034, -0.004]  P(<=0)=0.994  cost diff -0.001
+    B=0.04: +0.003 [-0.007, +0.013]  P(<=0)=0.294  cost diff -0.000
+    B=0.03: +0.011 [+0.003, +0.019]  P(<=0)=0.004  cost diff -0.000
+  cascade - task-aware selector (memory freed)
+    B=0.15: +0.023 [+0.008, +0.039]  P(<=0)=0.003  cost diff +0.001
+    B=0.1: +0.014 [-0.004, +0.032]  P(<=0)=0.062  cost diff +0.001
+    B=0.075: +0.027 [+0.008, +0.046]  P(<=0)=0.003  cost diff +0.001
+    B=0.05: +0.057 [+0.036, +0.077]  P(<=0)=0.000  cost diff +0.003
+    B=0.04: +0.021 [+0.003, +0.039]  P(<=0)=0.017  cost diff +0.001
+    B=0.03: +0.013 [-0.008, +0.032]  P(<=0)=0.113  cost diff +0.002
+  cascade - SHUFFLED (memory freed)
+    B=0.15: +0.021 [+0.007, +0.035]  P(<=0)=0.002  cost diff +0.001
+    B=0.1: +0.006 [-0.008, +0.019]  P(<=0)=0.209  cost diff -0.001
+    B=0.075: +0.032 [+0.015, +0.048]  P(<=0)=0.000  cost diff +0.000
+    B=0.05: +0.037 [+0.019, +0.055]  P(<=0)=0.000  cost diff +0.000
+    B=0.04: +0.006 [-0.009, +0.020]  P(<=0)=0.215  cost diff -0.000
+    B=0.03: -0.010 [-0.027, +0.007]  P(<=0)=0.885  cost diff -0.000
+  task-aware selector - static
+    B=0.15: +0.005 [-0.007, +0.019]  P(<=0)=0.189  cost diff +0.013
+    B=0.1: +0.000 [-0.014, +0.015]  P(<=0)=0.473  cost diff +0.005
+    B=0.075: +0.026 [+0.012, +0.042]  P(<=0)=0.000  cost diff +0.003
+    B=0.05: -0.015 [-0.034, +0.005]  P(<=0)=0.938  cost diff -0.003
+    B=0.04: +0.102 [+0.076, +0.127]  P(<=0)=0.000  cost diff +0.003
+    B=0.03: -0.016 [-0.032, -0.000]  P(<=0)=0.976  cost diff -0.000
+
+=== 4. Cascades on fold 1, seed 0 (memory-freed model) ===
+  B=0.15
+    docvqa   full@1.00|snapkv@0.15 -> attn@0.75|snapkv@0.50     thr [-0.878]
+    mmbench  uniform@0.50|snapkv@0.05 -> dissim@0.25|snapkv@0.07 thr [-0.524]
+    textvqa  uniform@0.75|snapkv@0.25 -> dissim@0.50|snapkv@0.50 thr [-0.944]
+  B=0.1
+    docvqa   full@1.00|snapkv@0.08 -> attn@0.75|snapkv@0.25     thr [-0.984]
+    mmbench  uniform@0.50|snapkv@0.05 -> dissim@0.25|snapkv@0.07 thr [-0.524]
+    textvqa  uniform@0.75|snapkv@0.15 -> dissim@0.50|snapkv@0.50 thr [-0.79]
+  B=0.075
+    docvqa   full@1.00|snapkv@0.08 -> attn@0.50|snapkv@0.25     thr [-1.65]
+    mmbench  uniform@0.50|snapkv@0.05 -> dissim@0.25|snapkv@0.07 thr [-0.524]
+    textvqa  attn@0.50|snapkv@0.15 -> uniform@0.75|snapkv@0.15  thr [-0.481]
+  B=0.05
+    docvqa   full@1.00|snapkv@0.05 -> attn@0.75|snapkv@0.09     thr [-0.874]
+    mmbench  uniform@0.50|snapkv@0.05 -> dissim@0.25|snapkv@0.07 thr [-0.524]
+    textvqa  attn@0.25|snapkv@0.09 -> dissim@0.75|snapkv@0.08   thr [-0.672]
+  B=0.04
+    docvqa   full@1.00|snapkv@0.05 -> uniform@0.50|snapkv@0.10  thr [-1.61]
+    mmbench  uniform@0.50|snapkv@0.05 -> dissim@0.25|snapkv@0.07 thr [-0.524]
+    textvqa  attn@0.50|snapkv@0.04 -> attn@0.75|snapkv@0.08     thr [-1.95]
+  B=0.03
+    docvqa   full@1.00|snapkv@0.02 -> full@1.00|snapkv@0.05     thr [-2.14]
+    mmbench  uniform@0.50|snapkv@0.05 -> dissim@0.25|snapkv@0.07 thr [-0.524]
+    textvqa  attn@0.25|snapkv@0.07 -> full@1.00|snapkv@0.02     thr [-2.36]
+
+wrote results/v0.2-baselines-fine/cascade_snapkv.json  (615s)

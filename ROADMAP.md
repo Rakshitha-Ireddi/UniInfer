@@ -32,13 +32,19 @@ The central research question: **what cheap signal tells us, before answering, t
 - 📋 **Direct "cheapest safe config" classification** instead of score regression; calibration analysis.
 - ✅ **Strong compression baselines: SnapKV and FastV-style** ([results](experiments/baselines/README.md)).
   Attention is rebuilt on SDPA (ADR-0009, gated by `--check-attn`). SnapKV removes most of the headroom at
-  ≥15% memory; the gap survives at ≤10% (+0.085 to +0.176). **Every per-request method from here on is
-  evaluated with SnapKV in the grid, at 10% memory and below.**
-- 📋 **More baselines:** PyramidKV and Ada-KV (per-layer / per-head budgets, the static analogue of what we
-  allocate per request), SparseVLM, VisionZip, exact mid-forward FastV.
-- 📋 **Finer low budgets:** SnapKV at 2–10% in 1-point steps, to remove the grid effect seen at 7.5%.
-- 📋 **Re-run cascades with SnapKV:** does answer confidence still detect damage at 5–10% KV, and does it beat
-  the shuffled control there?
+  ≥15% memory. **Every per-request method from here on is evaluated with SnapKV in the grid, near its cliff
+  (about 4–7% KV).**
+- ✅ **Finer low budgets:** SnapKV at 2–9% in 1-point steps. It found the cliff (5% → 4%) and showed that
+  coarse-grid task-aware gains at 7.5–10% were mostly grid effects.
+- ✅ **Cascades re-run with SnapKV:** confidence still detects damage (AUROC 0.83). With memory freed before a
+  retry it beats the shuffled control by +2 to +4 points at 3 of 6 budgets.
+- 🚧 **PyramidKV** (per-layer budgets): implemented and verified; sweep running.
+- 📋 **More baselines:** Ada-KV (per-head budgets; needs ragged heads in the cache), SparseVLM, VisionZip,
+  exact mid-forward FastV.
+- 📋 **"Needs almost no KV" detector:** the largest held-out gain (+0.102 at 4%) comes from moving MMBench
+  to about 2% KV. Predict *insensitive* requests, not only fragile ones.
+- 📋 **Cliff-aware allocation:** model each task's score-vs-KV curve and place requests just above their
+  cliff; compare with the Lagrangian oracle.
 - 📋 **Scale and generalize:** 500+ requests per dataset, plus ChartQA, InfoVQA and MathVista; second VLM
   (LLaVA-OneVision or InternVL); a 7B model.
 - ✅ **Statistics:** bootstrap CIs in `analyze.py` (#4); paired tests vs task-aware and a shuffled control for cascades.
