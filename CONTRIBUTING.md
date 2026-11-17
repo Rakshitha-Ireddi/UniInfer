@@ -32,6 +32,9 @@ For GPU work use `scripts/setup_env.sh` (see README).
 - [ ] New code has unit tests that run on CPU.
 - [ ] If you touched `runtime/`: `python experiments/oracle/sweep.py --check` prints `EQUIVALENCE PASS`
       (paste the output in the PR).
+- [ ] If you touched attention capture or an attention-guided operator: `sweep.py --check-attn` prints
+      `ATTENTION PASS`. If you touched `runtime/escalation.py`: `experiments/escalation/run.py --check` prints
+      `ESCALATION PASS`.
 - [ ] New results come with the script that produced them, a `*_meta.json`, and the realized cost.
 - [ ] Significant design choices come with an ADR (`docs/adr/template.md`).
 - [ ] Update `CHANGELOG.md` under *Unreleased*.
@@ -50,9 +53,22 @@ These are what make results here trustworthy. Please hold your PRs to them:
 ## Adding a compression operator
 
 1. Add a pure function to `src/uniinfer/compression/` that takes tensors and returns a keep-mask or a new
-   cache. Never mutate inputs.
-2. Add CPU tests (budget respected, protected tokens kept, input unchanged).
-3. Wire it into `QwenVLRunner.sweep` behind a name, and add it to the grid in `experiments/oracle/common.py`.
+   cache. Never mutate inputs. Export it from `uniinfer.compression`.
+2. Add CPU tests: budget respected, protected tokens kept (sinks and the 16-token observation window), input
+   unchanged, kept tokens in position order.
+3. Wire it in behind a name:
+   - **KV operator:** add a branch to `QwenVLRunner.compress()` and the name to `KV_METHODS`. If it needs
+     attention scores, request query capture (see how `snapkv` and `pyramid` do it).
+   - **Visual operator:** add the name to `METHODS` in `visual_tokens.py`; `keep_mask()` passes attention
+     scores for attention-guided methods.
+   - Add a descriptor flag in `config_descriptors` (`experiments/oracle/common.py`). Flags are added only
+     when the method is present, so older results stay byte-identical.
+4. Run it: `python experiments/oracle/sweep.py --kv-methods l2norm,<name>` (or `--v-methods`). Choose ratios
+   with `--kv-ratios` / `--v-ratios`.
+5. Cost is the KV length averaged over layers (`kv_tokens`). If layers or heads keep different counts, make
+   sure the realized cost reflects that.
+6. Compare with existing operators on the **same requests** with paired CIs (see
+   `experiments/baselines/pyramid.py` for a minimal example).
 
 ## Code style
 
