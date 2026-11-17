@@ -53,3 +53,8 @@ every prediction they share with v0.1. SnapKV is close to lossless down to 25% K
 oracle-static gap at budgets of 15% and above; the gap survives at 10% and below. Per-request allocation
 is therefore evaluated against SnapKV, at tight budgets, from now on
 ([results](../../experiments/baselines/README.md)).
+
+Update (2026-11-17): a 1-point SnapKV grid (2–9%) located a cliff between 5% and 4% KV, where the headroom
+peaks (+0.344 at 4%). PyramidKV (SnapKV selection with per-layer budgets, β = 20) was added. A flat pyramid
+reproduces SnapKV exactly, yet PyramidKV is 6–17 points worse at equal memory on Qwen2.5-VL, so the LLM
+pyramid prior does not transfer to this VLM.

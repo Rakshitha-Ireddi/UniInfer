@@ -38,11 +38,15 @@ The central research question: **what cheap signal tells us, before answering, t
   coarse-grid task-aware gains at 7.5–10% were mostly grid effects.
 - ✅ **Cascades re-run with SnapKV:** confidence still detects damage (AUROC 0.83). With memory freed before a
   retry it beats the shuffled control by +2 to +4 points at 3 of 6 budgets.
-- 🚧 **PyramidKV** (per-layer budgets): implemented and verified; sweep running.
+- ✅ **PyramidKV** (per-layer budgets): 6–17 points *worse* than SnapKV at equal memory on Qwen2.5-VL; the
+  LLM "pyramid" prior does not transfer.
+- 💡 **Learned per-layer budgets:** measure each layer's sensitivity (or invert the pyramid) instead of
+  assuming one; the static analogue of per-request allocation.
 - 📋 **More baselines:** Ada-KV (per-head budgets; needs ragged heads in the cache), SparseVLM, VisionZip,
   exact mid-forward FastV.
-- 📋 **"Needs almost no KV" detector:** the largest held-out gain (+0.102 at 4%) comes from moving MMBench
-  to about 2% KV. Predict *insensitive* requests, not only fragile ones.
+- ✅ **"Needs almost no KV" detector from request features:** near chance within a task (AUROC 0.43–0.66),
+  and T1–T3 selectors still do not beat the task label on the SnapKV grid. The usable per-request signal is
+  the cheap answer's confidence, which moves the focus to cascades with cheap escalation (v0.3).
 - 📋 **Cliff-aware allocation:** model each task's score-vs-KV curve and place requests just above their
   cliff; compare with the Lagrangian oracle.
 - 📋 **Scale and generalize:** 500+ requests per dataset, plus ChartQA, InfoVQA and MathVista; second VLM
@@ -53,8 +57,9 @@ The central research question: **what cheap signal tells us, before answering, t
 
 The memory saving matters when many requests share a KV pool. Show it end to end.
 
-- 📋 **Cheap escalation** (motivated by v0.2): keep the uncompressed prefill KV in a paged pool and re-compress
-  it instead of re-running prefill; free the cheap attempt's pages before the retry
+- 🚧 **Cheap escalation** (motivated by v0.2): one prefill, the escalation cache parked in pinned CPU memory,
+  the cheap cache freed before the retry (`uniinfer.runtime.escalation`). End-to-end run on new, held-out
+  requests is in progress (`experiments/escalation`).
 - 📋 Batched decode with **heterogeneous per-request KV lengths**
 - 📋 Admission control: requests/sec and tail latency under a fixed KV-memory cap
 - 📋 vLLM integration (paged KV plus per-request token budgets)

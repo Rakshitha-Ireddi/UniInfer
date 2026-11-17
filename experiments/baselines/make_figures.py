@@ -159,6 +159,35 @@ def fig_cascade(theme, t, cas, out):
     plt.close(fig)
 
 
+def fig_pyramid(theme, t, pyr, out):
+    """PyramidKV minus SnapKV at the same average KV memory, all visual tokens kept, per dataset (paired)."""
+    res = pyr["results"]
+    ratios = sorted({k.split("|")[1] for k in res if k.startswith("full@1.00")}, key=float, reverse=True)
+    names = [("all", "All", t["ink"])] + [(d, DATASETS[d] + (" (no change)" if d == "mmbench" else ""), t["series"][i])
+                                          for i, d in enumerate(DATASETS)]
+    fig, ax = plt.subplots(figsize=(8, 4.4), dpi=160, facecolor=t["surface"])
+    style(ax, t)
+    ax.axhline(0, color=t["ink2"], lw=1, zorder=2)
+    w = 0.2
+    for k, (d, label, col) in enumerate(names):
+        xs = [i + (k - 1.5) * w for i in range(len(ratios))]
+        r = [res[f"full@1.00|{q}"] for q in ratios]
+        ys = [x["diff"] if d == "all" else x["per_dataset"][d] for x in r]
+        ax.bar(xs, ys, width=w * 0.92, color=col, alpha=0.9 if d != "all" else 0.75, label=label, zorder=3)
+        if d == "all":
+            ax.errorbar(xs, ys, yerr=[[y - x["low"] for y, x in zip(ys, r)], [x["high"] - y for y, x in zip(ys, r)]],
+                        fmt="none", ecolor=t["ink2"], elinewidth=1.2, capsize=3, zorder=4)
+    ax.set_xticks(range(len(ratios)), [f"{float(q) * 100:g}%" for q in ratios])
+    ax.set_xlabel("Average KV memory (same for both methods)", color=t["ink2"], fontsize=10)
+    ax.set_ylabel("PyramidKV minus SnapKV (score)", color=t["ink2"], fontsize=10)
+    ax.set_title("PyramidKV's per-layer budgets hurt Qwen2.5-VL (paired, 95% CI on 'All')", color=t["ink"],
+                 fontsize=11, loc="left", pad=10)
+    _legend(ax, t, loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=4)
+    fig.tight_layout()
+    fig.savefig(out / f"pyramid_vs_snapkv_{theme}.png", facecolor=t["surface"])
+    plt.close(fig)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default=str(RES / "baselines_results.json"))
@@ -167,6 +196,8 @@ def main():
     res = json.load(open(a.results))
     cas_path = Path(a.results).with_name("cascade_snapkv.json")
     cas = json.load(open(cas_path)) if cas_path.exists() else None
+    pyr_path = REPO / "results" / "v0.2-pyramid" / "pyramid_results.json"
+    pyr = json.load(open(pyr_path)) if pyr_path.exists() else None
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     for theme, t in THEMES.items():
@@ -175,6 +206,8 @@ def main():
         fig_allocation(theme, t, res, out)
         if cas is not None:
             fig_cascade(theme, t, cas, out)
+        if pyr is not None:
+            fig_pyramid(theme, t, pyr, out)
     print("wrote", sorted(p.name for p in out.glob("*.png") if "operators" in p.name or "snapkv" in p.name))
 
 

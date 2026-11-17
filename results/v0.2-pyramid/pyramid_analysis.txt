@@ -1,0 +1,22 @@
+requests: 450 (docvqa=150, mmbench=150, textvqa=150)
+
+luck-free score (capped at the uncompressed score); difference = PyramidKV - SnapKV, paired 95% CI
+  config                  SnapKV  Pyramid              diff [95% CI]  cost ratio   per dataset
+  full@1.00 KV 0.25        0.850    0.792 -0.058 [-0.079, -0.038]    1.000   docvqa -0.059  mmbench +0.000  textvqa -0.116
+  full@1.00 KV 0.15        0.829    0.713 -0.116 [-0.144, -0.089]    1.000   docvqa -0.161  mmbench +0.000  textvqa -0.187
+  full@1.00 KV 0.10        0.804    0.636 -0.168 [-0.198, -0.139]    1.000   docvqa -0.284  mmbench +0.000  textvqa -0.220
+  full@1.00 KV 0.05        0.679    0.519 -0.160 [-0.187, -0.133]    1.002   docvqa -0.397  mmbench +0.000  textvqa -0.082
+  attn@0.25 KV 0.25        0.637    0.514 -0.123 [-0.152, -0.094]    1.000   docvqa -0.188  mmbench +0.013  textvqa -0.193
+  attn@0.25 KV 0.15        0.518    0.452 -0.066 [-0.087, -0.046]    1.000   docvqa -0.169  mmbench +0.013  textvqa -0.042
+  attn@0.25 KV 0.10        0.445    0.446 +0.001 [-0.014, +0.017]    1.001   docvqa -0.024  mmbench +0.013  textvqa +0.013
+  attn@0.25 KV 0.05        0.368    0.373 +0.004 [+0.000, +0.011]    1.000   docvqa +0.000  mmbench +0.013  textvqa +0.000
+  attn@0.50 KV 0.25        0.781    0.640 -0.141 [-0.171, -0.112]    1.000   docvqa -0.173  mmbench -0.013  textvqa -0.238
+  attn@0.50 KV 0.15        0.734    0.570 -0.164 [-0.195, -0.136]    1.000   docvqa -0.298  mmbench -0.013  textvqa -0.182
+  attn@0.50 KV 0.10        0.655    0.504 -0.151 [-0.180, -0.124]    1.000   docvqa -0.337  mmbench -0.013  textvqa -0.102
+  attn@0.50 KV 0.05        0.481    0.470 -0.010 [-0.028, +0.007]    1.002   docvqa -0.014  mmbench -0.013  textvqa -0.004
+  attn@0.75 KV 0.25        0.833    0.755 -0.078 [-0.101, -0.057]    1.000   docvqa -0.105  mmbench +0.000  textvqa -0.129
+  attn@0.75 KV 0.15        0.804    0.651 -0.152 [-0.182, -0.123]    1.001   docvqa -0.232  mmbench +0.000  textvqa -0.224
+  attn@0.75 KV 0.10        0.770    0.606 -0.163 [-0.193, -0.135]    1.000   docvqa -0.301  mmbench +0.000  textvqa -0.189
+  attn@0.75 KV 0.05        0.543    0.504 -0.038 [-0.057, -0.022]    1.001   docvqa -0.084  mmbench +0.000  textvqa -0.031
+
+wrote C:\Users\iredd\Desktop\My Projects\Project 8\results\v0.2-pyramid\pyramid_results.json

@@ -49,7 +49,7 @@ replicate (`python experiments/oracle/analyze.py`).
 > **Update (v0.2 baselines):** most of this headroom comes from the weak v0.1 KV operator. With SnapKV in the
 > grid, the best static config keeps full quality down to 25% memory and the gap at 15% shrinks to +0.026.
 > The headroom comes back near SnapKV's cliff (+0.34 at 4% memory). See
-> [Findings 7–10](#results-v02-strong-baselines).
+> [Findings 7–11](#results-v02-strong-baselines).
 
 **Finding 2: requests differ, and by task.** At 25% memory, every MMBench request and 91% of TextVQA
 requests keep their full-quality answer, but only 65% of DocVQA requests do.
@@ -115,7 +115,7 @@ visual  25%  kv  25%  ->  "The image shows a handwritten note with the following
 ## Results (v0.2): strong baselines
 
 Does the headroom survive a stronger static operator? We add **SnapKV** (KV eviction) and **FastV-style**
-visual pruning (PyramidKV is running), all guided by attention that we rebuild on SDPA and verify layer by layer
+visual pruning, plus **PyramidKV**, all guided by attention that we rebuild on SDPA and verify layer by layer
 ([ADR-0009](docs/adr/0009-attention-guided-baselines.md)). Same 450 requests, now 149 configs each, down to
 2% of the KV cache. Full write-up: [`experiments/baselines/`](experiments/baselines/README.md).
 
@@ -128,6 +128,10 @@ visual pruning (PyramidKV is running), all guided by attention that we rebuild o
 the KV cache, where L2-norm eviction drops to 0.590. With it, the oracle-static gap is **+0.005 at 25% memory**
 (it was +0.217) and **+0.026 [+0.015, +0.061] at 15%** (it was +0.316). FastV-style pruning helps only at
 mild pruning.
+
+PyramidKV, which gives lower layers more of the same budget, is **worse than SnapKV by 6 to 17 points** at
+equal memory (paired CIs exclude 0; DocVQA −0.40 at 5%). A flat pyramid reproduces SnapKV exactly, so this is
+the per-layer split, not a bug: the upper layers of Qwen2.5-VL still need the visual evidence.
 
 **Finding 8: SnapKV has a cliff, and the headroom comes back around it.** DocVQA falls from 0.70 to 0.43
 between 5% and 4% of the KV cache, while MMBench is unchanged even at 2%. The oracle still keeps full quality
@@ -150,6 +154,12 @@ When the cheap attempt's memory is freed before the retry, real confidence beats
 control by **+2.1, +3.2 and +3.7 points at 15%, 7.5% and 5%** (all survive a Holm correction) and reaches
 0.728 at 5% memory, against 0.685 for static and 0.671 for task-aware allocation. When a failed attempt is
 paid in full, the effect is mixed. Cheap escalation (re-compressing a retained prefill KV) is the v0.3 target.
+
+**Finding 11: the per-request signal is in the cheap answer, not in the input.** On the SnapKV grid,
+learned selectors with request features (up to a full prefill's hidden state) still do not beat the task
+label: +0.035 at 5% memory, but −0.03 at 4% and −0.02 at 3%. A detector for requests that keep their answer
+at 2–3% KV is near chance within a task (AUROC 0.43–0.66). The answer's own confidence after a cheap attempt
+reaches 0.83, so per-request adaptation should be a cascade with cheap escalation.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/figures/cascade_snapkv_dark.png">
@@ -234,16 +244,18 @@ The method and protocol are in [`experiments/oracle/README.md`](experiments/orac
 
 ```text
 src/uniinfer/          installable library
-  runtime/             Qwen2.5-VL runner with explicit prefill / compress / decode
+  runtime/             Qwen2.5-VL runner with explicit prefill / compress / decode; cheap escalation
   compression/         visual-token selection, KV-cache eviction
   controller/          budgeted per-request config selection
   metrics.py data.py   task metrics, benchmark loaders and prompts
 experiments/oracle/    v0.1 study: sweep -> features -> analyze -> predictor -> figures
 experiments/cascade/   v0.2 study: confidence cascades, shuffled control, paired tests
 experiments/baselines/ v0.2 study: SnapKV, PyramidKV, FastV-style baselines; cascades on that grid
+experiments/escalation/ v0.3 groundwork: cheap escalation, end to end on new requests
 results/v0.1-oracle/   committed raw results + reports (reproducible on CPU)
 results/v0.2-cascade/  same requests + per-config confidence
 results/v0.2-baselines*/ same requests x 149 configs with attention-guided operators
+results/v0.2-pyramid/  same requests, PyramidKV vs SnapKV
 docs/adr/              architecture decision records
 docs/figures/          README figures (light + dark)
 scripts/               environment setup, smoke test
@@ -254,7 +266,7 @@ tests/                 CPU unit tests (run in CI)
 
 - One model (Qwen2.5-VL-3B), 150 requests per dataset, greedy decoding, batch size 1.
 - v0.1 and the first v0.2 cascade study use simple operators. With SnapKV the headroom at ≥15% memory
-  mostly disappears (Findings 7–10). FastV is a pre-prefill variant; SparseVLM, VisionZip and Ada-KV are
+  mostly disappears (Findings 7–11). FastV is a pre-prefill variant; SparseVLM, VisionZip and Ada-KV are
   not yet tested.
 - Many budgets and comparisons are reported. Every one is shown with its CI, and the confidence signal was
   fixed before the SnapKV cascade runs.

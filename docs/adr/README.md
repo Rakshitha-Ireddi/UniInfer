@@ -14,5 +14,6 @@ ADRs are never deleted. A reversed decision gets a new ADR that marks the old on
 | [0007](0007-repository-and-reproducibility.md) | Repository layout, committed results, environment | Accepted |
 | [0008](0008-confidence-cascade.md) | Confidence cascades, with failed attempts paid for | Accepted |
 | [0009](0009-attention-guided-baselines.md) | Attention-guided baselines (SnapKV, FastV-style) via attention reconstruction | Accepted |
+| [0010](0010-cheap-escalation.md) | Cheap escalation for KV cascades: one prefill, parked escalation cache | Accepted |
 
-New ADRs: copy [`template.md`](template.md), take the next number, and open a PR.
+New ADRs: copy [`template.md`](template.md), and take the next number.

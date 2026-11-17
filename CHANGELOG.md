@@ -23,6 +23,9 @@ versions follow [SemVer](https://semver.org/).
 - PyramidKV (`compress_kv_pyramid`, `pyramid_budgets`, `kv_method="pyramid"`): SnapKV selection with a
   per-layer budget pyramid (β = 20). `kv_tokens` counts KV cost as the length averaged over layers
   (unchanged for every other operator).
+- `experiments/baselines/learned_snapkv.py`: learned T1–T3 selectors on the SnapKV grid, and a within-task
+  "needs almost no KV" detector.
+- `experiments/baselines/pyramid.py`: paired PyramidKV-vs-SnapKV comparison; figure `pyramid_vs_snapkv_*.png`.
 - `uniinfer.controller.group_frontiers` and `fit_group_cascades(..., fronts=)`: reuse per-task cascade
   frontiers across budgets (identical results; 387 s → 242 s on the 100-config run).
 
@@ -43,6 +46,12 @@ versions follow [SemVer](https://semver.org/).
 - Held-out task-aware allocation is about 1.3 points worse than one static SnapKV config at ≥25% memory and
   +0.102 [+0.076, +0.127] better at 4% (MMBench moved to about 2% KV). Gains a coarse grid showed at 7.5–10%
   mostly vanish with 1-point steps (+0.089 → +0.026 at 7.5%, +0.024 → +0.000 at 10%).
+- PyramidKV (β = 20) is worse than SnapKV at equal memory: −0.058 at 25% up to −0.168 at 10% (paired CIs
+  exclude 0; DocVQA −0.397 at 5%); significantly worse in 13 of 16 matched configs. Results in
+  `results/v0.2-pyramid` (RTX 3090; 97.6% of shared predictions match the A5000 sweeps).
+- Request features still do not beat the task label on the SnapKV grid (T2/T3: +0.035 at 5%, −0.03 at 4%,
+  −0.02 at 3%), and cannot detect insensitive requests within a task (AUROC 0.43–0.66). The answer's own
+  confidence after a cheap attempt can (0.83).
 - Cascades on the SnapKV grid: answer min log-prob still detects damage (AUROC 0.83). With memory freed
   before a retry, real confidence beats the shuffled control at 15%, 7.5% and 5% (+0.021, +0.032, +0.037;
   Holm-corrected) and reaches 0.728 at 5% vs 0.685 static. With retries paid in full, the effect is mixed.

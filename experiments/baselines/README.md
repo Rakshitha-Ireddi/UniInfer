@@ -44,7 +44,7 @@ All sweeps cover the same 450 requests (150 each from TextVQA, DocVQA, MMBench; 
 | 1 | `sweep.py --v-methods uniform,dissim,attn --kv-methods l2norm,snapkv --out results/v0.2-baselines/oracle_sweep.jsonl` | about 1 h | 70 configs |
 | 2 | `sweep.py --v-methods uniform,dissim,attn --kv-methods snapkv --kv-ratios 1.0,0.15,0.1,0.05 --out results/v0.2-baselines-low/oracle_sweep.jsonl` | about 35 min | +30 configs |
 | 3 | `sweep.py --v-methods dissim,attn --kv-methods snapkv --kv-ratios 1.0,0.09,0.08,0.07,0.06,0.04,0.03,0.02 --out results/v0.2-baselines-fine/oracle_sweep.jsonl` | about 1 h | +49 configs |
-| 4 | `sweep.py --v-methods attn --kv-methods pyramid --kv-ratios 1.0,0.25,0.15,0.1,0.05 --out results/v0.2-pyramid/oracle_sweep.jsonl` | about 1.2 h | PyramidKV, 20 configs |
+| 4 | `sweep.py --v-methods attn --kv-methods pyramid --kv-ratios 1.0,0.25,0.15,0.1,0.05 --out results/v0.2-pyramid/oracle_sweep.jsonl` | about 1.2 h | PyramidKV, 20 configs (`python experiments/baselines/pyramid.py`) |
 
 CPU analysis (merges the sweeps; `merged_sweep*.jsonl` is rebuilt on every run and not committed):
 
@@ -171,11 +171,55 @@ attempt is paid in full, real and shuffled confidence are mixed (+0.018 at 15%, 
 which matches the v0.2 finding that escalation cost is the bottleneck. Full output:
 [`cascade_snapkv.txt`](../../results/v0.2-baselines-fine/cascade_snapkv.txt).
 
-### 5. PyramidKV
+### 5. PyramidKV is much worse than SnapKV on this VLM
 
-*Pending: the sweep is running.* On the first 64 TextVQA requests, PyramidKV is clearly below SnapKV at the
-same average memory (e.g. 0.542 vs 0.693 raw at 15%). A unit test confirms that a flat pyramid (β = 1)
-reproduces SnapKV exactly, so the difference comes from the per-layer budget split.
+PyramidKV keeps the same average KV memory as SnapKV, but gives lower layers more tokens and upper layers
+fewer (β = 20: the top layer keeps about the 16-token window). Same requests, same visual config, paired:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/figures/pyramid_vs_snapkv_dark.png">
+  <img alt="PyramidKV minus SnapKV score per KV budget, overall and per dataset; all negative except MMBench (zero)" src="../../docs/figures/pyramid_vs_snapkv_light.png">
+</picture>
+
+| Avg. KV memory (all visual tokens) | SnapKV | PyramidKV | Difference (95% CI) | DocVQA | TextVQA | MMBench |
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| 25% | 0.850 | 0.792 | −0.058 [−0.079, −0.038] | −0.059 | −0.116 | 0.000 |
+| 15% | 0.829 | 0.713 | −0.116 [−0.144, −0.089] | −0.161 | −0.187 | 0.000 |
+| 10% | 0.804 | 0.636 | −0.168 [−0.198, −0.139] | −0.284 | −0.220 | 0.000 |
+| 5% | 0.679 | 0.519 | −0.160 [−0.187, −0.133] | −0.397 | −0.082 | 0.000 |
+
+Over all 16 matched configs (4 visual settings × 4 KV ratios), PyramidKV is significantly worse in 13 and
+never better by more than +0.004. The cost matches to within 0.5%. Two checks rule out an implementation error: a
+flat pyramid (β = 1) reproduces SnapKV exactly (unit test), and the run itself passed both GPU gates. The
+PyramidKV sweep ran on an RTX 3090; on the 1800 configs it shares with the A5000 sweeps, 97.6% of predictions
+are identical and the mean score differs by +0.002, far below the effects here.
+
+The damage is largest on text-heavy tasks (DocVQA, TextVQA). It suggests that in Qwen2.5-VL the upper
+layers still need many of the visual (OCR) tokens, so starving them is worse than SnapKV's even split. The
+LLM-derived "pyramidal funnelling" prior does not transfer here. Per-layer budgets that are *learned* for the
+model (or an inverted pyramid) are an open question. Full output:
+[`results/v0.2-pyramid/pyramid_analysis.txt`](../../results/v0.2-pyramid/pyramid_analysis.txt).
+
+### 6. Signals available *before* answering still do not beat the task label
+
+v0.1 found that learned selectors with request features (T1 image/question statistics, T2 + question
+embedding, T3 + prefill hidden state) did no better than a task label, on the weak grid.
+`learned_snapkv.py` repeats this on the 149-config SnapKV grid at tight budgets (held-out, 5-fold × 3
+seeds; task label included in every feature set, so the comparison isolates the per-request part).
+
+| Avg. KV budget | 15% | 10% | 7.5% | 5% | 4% | 3% |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Task label only | 0.822 | 0.803 | 0.787 | 0.671 | 0.614 | 0.461 |
+| T2 (+ question embedding) − task label | −0.006 | +0.009 | −0.001 | **+0.035** [+0.014, +0.056] | **−0.030** [−0.052, −0.010] | **−0.019** [−0.039, −0.001] |
+| T3 (+ prefill hidden state) − task label | −0.003 | +0.002 | −0.005 | **+0.033** [+0.012, +0.054] | **−0.029** [−0.050, −0.007] | **−0.019** [−0.037, −0.001] |
+
+Request features help at one budget and hurt at two; T1 alone is never better. We also asked directly whether
+features can spot the requests that keep their answer at 2–3% KV (the MMBench-like requests that fund the
+rest). **Within a task, the detector is near chance** (AUROC 0.43–0.66 for T1–T3, also when restricted to
+requests the uncompressed model answers correctly). By contrast, the answer's own confidence *after* a cheap
+attempt detects damage with AUROC 0.83 (section 4). So the per-request signal lives in the cheap answer,
+not in the input: the right design is a cascade, and its cost is the escalation. Output:
+[`learned_snapkv.txt`](../../results/v0.2-baselines-fine/learned_snapkv.txt).
 
 ## What this changes
 
@@ -184,9 +228,11 @@ reproduces SnapKV exactly, so the difference comes from the per-layer budget spl
 - **The useful per-request signal is real but small, and it needs cheap escalation.** That is the v0.3
   serving problem: keep the prefill KV, re-compress instead of re-running prefill, and free the cheap
   attempt's pages before the retry.
-- **Insensitive requests fund fragile ones.** The biggest held-out gain (+0.102 at 4%) comes from moving
-  memory away from MMBench. A detector for "this request needs almost no KV" may be worth more than a
-  detector for fragile requests.
+- **Not every "stronger" operator is stronger here.** PyramidKV, a standard improvement over SnapKV for LLMs,
+  loses 6–17 points on this VLM at equal memory. Baselines must be re-validated per model.
+- **Insensitive requests fund fragile ones, but only the task label finds them before answering.** The
+  biggest held-out gain (+0.102 at 4%) comes from moving memory away from MMBench. Request features cannot
+  pick insensitive requests within a task; a cheap first answer can.
 
 ## Caveats
 
