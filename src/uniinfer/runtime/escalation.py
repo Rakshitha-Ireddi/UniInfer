@@ -25,7 +25,8 @@ from ..signals import answer_confidence
 
 
 def cache_to(cache: DynamicCache, device: torch.device | str) -> DynamicCache:
-    """Copy of `cache` on `device`. CPU copies are pinned so the copy back to the GPU is fast."""
+    """Independent copy of `cache` on `device` (never aliases the input). CPU copies are pinned when a GPU
+    exists, so the copy back is fast."""
     out = DynamicCache()
     pin = torch.device(device).type == "cpu" and torch.cuda.is_available()
     for li, (k, v) in enumerate(zip(cache.key_cache, cache.value_cache)):
@@ -33,7 +34,7 @@ def cache_to(cache: DynamicCache, device: torch.device | str) -> DynamicCache:
             kk = torch.empty(k.shape, dtype=k.dtype, pin_memory=True).copy_(k)
             vv = torch.empty(v.shape, dtype=v.dtype, pin_memory=True).copy_(v)
         else:
-            kk, vv = k.to(device), v.to(device)
+            kk, vv = k.to(device, copy=True), v.to(device, copy=True)  # always a copy, also on the same device
         out.update(kk, vv, li)
     return out
 
