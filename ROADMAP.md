@@ -49,8 +49,9 @@ The central research question: **what cheap signal tells us, before answering, t
   the cheap answer's confidence, which moves the focus to cascades with cheap escalation (v0.3).
 - 📋 **Cliff-aware allocation:** model each task's score-vs-KV curve and place requests just above their
   cliff; compare with the Lagrangian oracle.
-- 📋 **Scale and generalize:** 500+ requests per dataset, plus ChartQA, InfoVQA and MathVista; second VLM
-  (LLaVA-OneVision or InternVL); a 7B model.
+- 🚧 **Scale and generalize:** ✅ 500 requests per dataset plus ChartQA on the SnapKV grid
+  (`experiments/scale`): the cliff and the 4% task-aware gain hold; the KV-only cascade gain is about
+  1 point. 📋 InfoVQA and MathVista; second VLM (LLaVA-OneVision or InternVL); a 7B model.
 - ✅ **Statistics:** bootstrap CIs in `analyze.py` (#4); paired tests vs task-aware and a shuffled control for cascades.
 
 ## v0.3: Make it real in serving 📋

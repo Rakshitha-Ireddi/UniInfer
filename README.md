@@ -154,6 +154,7 @@ When the cheap attempt's memory is freed before the retry, real confidence beats
 control by **+2.1, +3.2 and +3.7 points at 15%, 7.5% and 5%** (all survive a Holm correction) and reaches
 0.728 at 5% memory, against 0.685 for static and 0.671 for task-aware allocation. When a failed attempt is
 paid in full, the effect is mixed. Cheap escalation (re-compressing a retained prefill KV) is the v0.3 target.
+At 2000 requests and KV-only grids the per-request part shrinks to about 1 point (Finding 13).
 
 **Finding 11: the per-request signal is in the cheap answer, not in the input.** On the SnapKV grid,
 learned selectors with request features (up to a full prefill's hidden state) still do not beat the task
@@ -165,6 +166,29 @@ reaches 0.83, so per-request adaptation should be a cascade with cheap escalatio
   <source media="(prefers-color-scheme: dark)" srcset="docs/figures/cascade_snapkv_dark.png">
   <img alt="Held-out score vs realized KV memory for static, task-aware, a confidence cascade and its shuffled control" src="docs/figures/cascade_snapkv_light.png">
 </picture>
+
+## Results (v0.3): scale-up and a fourth task
+
+Do the SnapKV findings survive more data? **2000 requests** (500 each from TextVQA, DocVQA, MMBench and the
+new **ChartQA**), all visual tokens, SnapKV from 100% down to 2% KV. Every analysis choice was fixed before
+the run. The 450 requests shared with v0.2 reproduce every prediction made on the same GPU type. Full
+write-up: [`experiments/scale/`](experiments/scale/README.md).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/scale_snapkv_dark.png">
+  <img alt="Left: SnapKV score vs KV kept for DocVQA, TextVQA, ChartQA and MMBench. Right: held-out task-aware minus static and cascade minus shuffled, per budget, with 95% CIs" src="docs/figures/scale_snapkv_light.png">
+</picture>
+
+**Finding 12: the cliff and the 4% gain hold, and the new task behaves differently.** DocVQA again falls from
+0.70 to 0.44 between 5% and 4% KV, MMBench again keeps every answer at 2%, and held-out task-aware allocation
+is again **+0.097 [+0.086, +0.109] better than static at 4%**. ChartQA has no cliff: it loses quality early
+(0.738 → 0.626 at 10%) and flattens out near 0.50.
+
+**Finding 13: per-request confidence helps, but by about 1 point, not 2–4.** A confidence cascade (memory
+freed before the retry) is the best method at every budget, and beats a shuffled-confidence control at 6 of
+7 budgets. The margin is +0.004 to +0.014 (e.g. 0.709 vs 0.695 at 5%). On v0.2's own 450 requests a KV-only
+cascade gains just as little, so the earlier +2–4 points came from mixing in visual-pruning stages, not from
+sample noise. The signal is also weaker on ChartQA (AUROC 0.67 vs 0.80–0.85).
 
 ## How it works
 
@@ -227,6 +251,8 @@ python experiments/baselines/analyze.py --extra $E \
 python experiments/baselines/cascade_snapkv.py --extra $E --budgets 0.15,0.1,0.075,0.05,0.04,0.03 \
     --out results/v0.2-baselines-fine/cascade_snapkv          # cascades on the SnapKV grid (about 10 min)
 python experiments/baselines/make_figures.py
+python experiments/scale/analyze.py         # v0.3 scale-up, 2000 requests (CPU, a few minutes)
+python experiments/scale/figures.py
 ```
 
 Regenerate the raw results on a GPU (about 25 min for the sweep, 3 min for features, on one A5000):
@@ -264,7 +290,8 @@ tests/                 CPU unit tests (run in CI)
 
 ## Limitations (read before citing)
 
-- One model (Qwen2.5-VL-3B), 150 requests per dataset, greedy decoding, batch size 1.
+- One model (Qwen2.5-VL-3B), greedy decoding, batch size 1. v0.1–v0.2 use 150 requests per dataset; the
+  v0.3 scale-up (500 per dataset, 4 tasks) re-tests only the KV-only SnapKV grid.
 - v0.1 and the first v0.2 cascade study use simple operators. With SnapKV the headroom at ≥15% memory
   mostly disappears (Findings 7–11). FastV is a pre-prefill variant; SparseVLM, VisionZip and Ada-KV are
   not yet tested.
@@ -280,7 +307,7 @@ tests/                 CPU unit tests (run in CI)
 |---|---|---|
 | **v0.1** | Oracle study plus first learned selector | ✅ released |
 | **v0.2** | Close the oracle gap with per-request signals; strong baselines; second VLM | 🚧 cascades, strong baselines and cascades on SnapKV done |
-| **v0.3** | Serving: batched decode with heterogeneous budgets, vLLM integration, throughput under memory caps | 📋 planned |
+| **v0.3** | Serving: cheap escalation, batched decode with heterogeneous budgets, vLLM integration, throughput under memory caps | 🚧 escalation runtime and 2000-request scale-up done |
 | **v0.4** | Compression foundation: INT4/INT8 weights (AWQ/GPTQ), KV quantization, Triton kernels | 📋 planned |
 | **v1.0** | Benchmark suite plus paper | 📋 planned |
 
