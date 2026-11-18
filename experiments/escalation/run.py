@@ -50,6 +50,8 @@ def main():
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
     plan = json.load(open(a.plan))
+    # fail fast on a bad --exclude path, before loading the model (the check needs no exclusions)
+    seen = set() if a.check else {json.loads(line)["id"] for line in open(a.exclude)}
     runner = QwenVLRunner(a.model)
 
     if a.check:
@@ -63,7 +65,6 @@ def main():
         print("ESCALATION", "PASS" if ok else "FAIL")
         raise SystemExit(0 if ok else 1)
 
-    seen = {json.loads(line)["id"] for line in open(a.exclude)}
     out = Path(a.out)
     done = {json.loads(line)["id"] for line in out.open()} if out.exists() else set()
     meta = dict(model=a.model, gpu=torch.cuda.get_device_name(0), seed=a.seed, n=a.n, plan=plan,

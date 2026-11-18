@@ -28,6 +28,14 @@ versions follow [SemVer](https://semver.org/).
 - `experiments/baselines/pyramid.py`: paired PyramidKV-vs-SnapKV comparison; figure `pyramid_vs_snapkv_*.png`.
 - `uniinfer.controller.group_frontiers` and `fit_group_cascades(..., fronts=)`: reuse per-task cascade
   frontiers across budgets (identical results; 387 s → 242 s on the 100-config run).
+- `experiments/scale`: v0.3 scale-up, 2000 requests (TextVQA, DocVQA, MMBench, ChartQA × 500) on the
+  KV-only SnapKV grid (13 configs). `analyze.py` (curves, headroom, held-out allocation and cascades with
+  paired CIs; `--datasets`, `--ids-from` for subset checks) and `figures.py` (`scale_snapkv_*.png`).
+  Results in `results/v0.3-scale`.
+
+### Fixed
+- `experiments/escalation/run.py` checks the `--exclude` path before loading the model, and `--check`
+  no longer needs it.
 
 ### Verified
 - `--check-attn`: ATTENTION PASS (worst relative error 0.0117 over 36 layers × 6 samples, RTX A5000).
@@ -56,6 +64,14 @@ versions follow [SemVer](https://semver.org/).
   before a retry, real confidence beats the shuffled control at 15%, 7.5% and 5% (+0.021, +0.032, +0.037;
   Holm-corrected) and reaches 0.728 at 5% vs 0.685 static. With retries paid in full, the effect is mixed.
 - FastV-style (pre-prefill) visual pruning helps only at 75% keep.
+- Scale-up (2000 requests, 4 tasks): the DocVQA cliff (0.70 → 0.44 between 5% and 4%), MMBench's
+  insensitivity and the 4% task-aware gain (+0.097 [+0.086, +0.109]) reproduce. ChartQA degrades early and
+  has no cliff. A KV-only confidence cascade is best at every budget but beats the shuffled control by only
+  +0.004 to +0.014 (6 of 7 budgets); the same holds on the v0.2 requests, so v0.2's +2–4 points came from
+  its mixed grid. At B = 0.15, token rounding (SnapKV 15% costs 0.15001) excludes the 15% static config;
+  with B = 0.1501 task-aware − static is +0.004.
+- The 450 requests shared with v0.2 reproduce all 2250 predictions made on an A5000; 96.3% of those from
+  the RTX 3090 fine sweep.
 
 ## [0.2.0] - 2026-11-12
 

@@ -1,0 +1,32 @@
+{
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "gpu": "NVIDIA RTX A5000",
+  "max_pixels": 802816,
+  "seed": 0,
+  "v_ratios": [
+    1.0
+  ],
+  "v_methods": [
+    "uniform",
+    "dissim"
+  ],
+  "kv_ratios": [
+    1.0,
+    0.5,
+    0.25,
+    0.15,
+    0.1,
+    0.09,
+    0.08,
+    0.07,
+    0.06,
+    0.05,
+    0.04,
+    0.03,
+    0.02
+  ],
+  "kv_methods": [
+    "snapkv"
+  ],
+  "torch": "2.5.1+cu121"
+}
