@@ -33,6 +33,11 @@ versions follow [SemVer](https://semver.org/).
   paired CIs; `--datasets`, `--ids-from` for subset checks) and `figures.py` (`scale_snapkv_*.png`).
   Results in `results/v0.3-scale`.
 
+- Cheap-escalation results (`results/v0.3-escalation`): the end-to-end GPU run on 300 new requests,
+  `experiments/escalation/transfer.py` (the fixed plan replayed on the 1050 held-out scale-sweep requests,
+  against task-aware allocation and rate-matched random escalation) and `figures.py`
+  (`escalation_*.png`). `analyze.py` also reports mean latency.
+
 ### Fixed
 - `experiments/escalation/run.py` checks the `--exclude` path before loading the model, and `--check`
   no longer needs it.
@@ -72,6 +77,13 @@ versions follow [SemVer](https://semver.org/).
   with B = 0.1501 task-aware − static is +0.004.
 - The 450 requests shared with v0.2 reproduce all 2250 predictions made on an A5000; 96.3% of those from
   the RTX 3090 fine sweep.
+- Cheap escalation, end to end (300 new requests, A5000): a retry costs a 1.1–1.4 ms copy of the parked
+  cache instead of a 510–520 ms re-prefill (escalated requests: 0.73 s vs 1.22 s median). The cascade beats
+  static by +0.031 [+0.016, +0.051] at 7.5% and +0.054 [+0.030, +0.080] at 5% KV. Parked-cache and
+  re-prefill modes give identical answers on every request.
+- The fixed plan replayed on 1050 held-out requests (matches the GPU run on all 348 shared answers and 174
+  escalation decisions): cascade − random escalation at equal cost +0.022 [+0.014, +0.032] at 7.5% and
+  +0.026 [+0.017, +0.035] at 5%; cascade − task-aware +0.013 and +0.036.
 
 ## [0.2.0] - 2026-11-12
 

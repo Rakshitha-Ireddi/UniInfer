@@ -65,7 +65,8 @@ def main():
         t_st, t_off, t_rep = col(st, "total_s"), col(off, "total_s"), col(rep, "total_s")
         peak_off = col(off, "peak_decode_kv_bytes")
         lat = dict(static_median_s=float(np.median(t_st)), offload_median_s=float(np.median(t_off)),
-                   reprefill_median_s=float(np.median(t_rep)))
+                   reprefill_median_s=float(np.median(t_rep)), static_mean_s=float(t_st.mean()),
+                   offload_mean_s=float(t_off.mean()), reprefill_mean_s=float(t_rep.mean()))
         if esc.any():
             extra_off = np.array([r[off]["timings"].get("transfer", 0.0) for r in runs])[esc]
             extra_rep = t_rep[esc] - t_off[esc]
@@ -80,6 +81,8 @@ def main():
                              parked_mb_median=float(np.median(col(off, "offloaded_bytes")) / 2**20))
         print(f"  latency (median s/request): static {lat['static_median_s']:.3f}  cascade+offload "
               f"{lat['offload_median_s']:.3f}  cascade+re-prefill {lat['reprefill_median_s']:.3f}")
+        print(f"  latency (mean s/request):   static {lat['static_mean_s']:.3f}  cascade+offload "
+              f"{lat['offload_mean_s']:.3f}  cascade+re-prefill {lat['reprefill_mean_s']:.3f}")
         if esc.any():
             print(f"    escalated requests only: offload {lat['escalated_offload_median_s']:.3f} s vs re-prefill "
                   f"{lat['escalated_reprefill_median_s']:.3f} s; PCIe copy back {lat['transfer_median_ms']:.1f} ms vs "

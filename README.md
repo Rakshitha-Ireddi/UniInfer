@@ -190,6 +190,31 @@ freed before the retry) is the best method at every budget, and beats a shuffled
 cascade gains just as little, so the earlier +2–4 points came from mixing in visual-pruning stages, not from
 sample noise. The signal is also weaker on ChartQA (AUROC 0.67 vs 0.80–0.85).
 
+## Results (v0.3): cheap escalation, end to end
+
+A cascade retries with more KV when the cheap answer looks unsure. Because SnapKV compresses *after*
+prefill, both stages can come from one prefill: the retry's cache is parked in CPU memory and copied back
+only if needed ([ADR-0010](docs/adr/0010-cheap-escalation.md)). We fixed per-task cascades on the v0.2
+requests, then ran them on 300 new requests on the GPU and replayed them on 1050 more. Full write-up:
+[`experiments/escalation/`](experiments/escalation/README.md).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/escalation_dark.png">
+  <img alt="Left: held-out score of static, task-aware, random escalation and the confidence cascade at 7.5% and 5% KV. Right: median latency of static requests and of escalated requests with a parked cache vs re-prefill" src="docs/figures/escalation_light.png">
+</picture>
+
+**Finding 14: cheap escalation makes the cascade practical.** A retry costs a 1–1.4 ms copy instead of a
+510 ms re-prefill, so escalated requests take 0.73 s instead of 1.22 s (static: 0.58 s), and only one
+stage's KV is on the GPU at a time. On 300 new requests the cascade beats static SnapKV by **+0.031 at
+7.5%** and **+0.054 at 5%** of the KV cache, at the same memory.
+
+**Finding 15: choosing who escalates is worth 2–3 points on held-out data.** Replayed on 1050 held-out
+requests (exactly: the replay matches the GPU run on all 348 shared answers), the cascade beats the same
+stages with random escalation at equal cost by **+0.022 [+0.014, +0.032] at 7.5%** and
+**+0.026 [+0.017, +0.035] at 5%**. At 5%, where task-aware allocation adds nothing, the cascade gains
++0.036 over both static and task-aware. Finding 13's control is stricter (it refits the whole cascade on shuffled
+confidence) and gives about 1 point; both show a real per-request signal, and 1 point is the conservative size.
+
 ## How it works
 
 ```mermaid
@@ -253,6 +278,9 @@ python experiments/baselines/cascade_snapkv.py --extra $E --budgets 0.15,0.1,0.0
 python experiments/baselines/make_figures.py
 python experiments/scale/analyze.py         # v0.3 scale-up, 2000 requests (CPU, a few minutes)
 python experiments/scale/figures.py
+python experiments/escalation/analyze.py     # v0.3 escalation GPU run (CPU summary)
+python experiments/escalation/transfer.py    # the plan replayed on 1050 held-out requests
+python experiments/escalation/figures.py
 ```
 
 Regenerate the raw results on a GPU (about 25 min for the sweep, 3 min for features, on one A5000):
@@ -307,7 +335,7 @@ tests/                 CPU unit tests (run in CI)
 |---|---|---|
 | **v0.1** | Oracle study plus first learned selector | ✅ released |
 | **v0.2** | Close the oracle gap with per-request signals; strong baselines; second VLM | 🚧 cascades, strong baselines and cascades on SnapKV done |
-| **v0.3** | Serving: cheap escalation, batched decode with heterogeneous budgets, vLLM integration, throughput under memory caps | 🚧 escalation runtime and 2000-request scale-up done |
+| **v0.3** | Serving: cheap escalation, batched decode with heterogeneous budgets, vLLM integration, throughput under memory caps | 🚧 cheap escalation (end to end) and 2000-request scale-up done |
 | **v0.4** | Compression foundation: INT4/INT8 weights (AWQ/GPTQ), KV quantization, Triton kernels | 📋 planned |
 | **v1.0** | Benchmark suite plus paper | 📋 planned |
 

@@ -1,0 +1,110 @@
+{
+  "n": 300,
+  "uncompressed": 0.8912046177548865,
+  "budgets": {
+    "0.075": {
+      "static": {
+        "score": 0.8360915800085607,
+        "cost": 0.07006997333333333
+      },
+      "cascade": {
+        "score": 0.8674886733043883,
+        "cost_max": 0.07272915666666666,
+        "cost_sum": 0.08231659333333333,
+        "escalation_rate": 0.13666666666666666,
+        "per_task": {
+          "docvqa": {
+            "score": 0.8957993532464981,
+            "static": 0.884941406692349,
+            "escalation_rate": 0.07
+          },
+          "mmbench": {
+            "score": 0.88,
+            "static": 0.88,
+            "escalation_rate": 0.0
+          },
+          "textvqa": {
+            "score": 0.8266666666666665,
+            "static": 0.7433333333333334,
+            "escalation_rate": 0.34
+          }
+        }
+      },
+      "cascade_minus_static": {
+        "diff": 0.03139709329582747,
+        "low": 0.015555555555555557,
+        "high": 0.051397093295827465,
+        "p_le_0": 0.0
+      },
+      "latency": {
+        "static_median_s": 0.5835600000000001,
+        "offload_median_s": 0.605435,
+        "reprefill_median_s": 0.5962700000000001,
+        "static_mean_s": 0.5700233666666666,
+        "offload_mean_s": 0.5886570666666667,
+        "reprefill_mean_s": 0.6521013333333333,
+        "escalated_offload_median_s": 0.73227,
+        "escalated_reprefill_median_s": 1.22076,
+        "transfer_median_ms": 1.4,
+        "reprefill_extra_median_ms": 509.8800000000001,
+        "offload_copy_median_ms": 1.4649999999999999
+      },
+      "memory": {
+        "peak_decode_kv_mb_median": 2.49609375,
+        "parked_mb_median": 5.326171875
+      }
+    },
+    "0.05": {
+      "static": {
+        "score": 0.7481620351273991,
+        "cost": 0.04991577
+      },
+      "cascade": {
+        "score": 0.8025488933686874,
+        "cost_max": 0.0486092,
+        "cost_sum": 0.05799015,
+        "escalation_rate": 0.30666666666666664,
+        "per_task": {
+          "docvqa": {
+            "score": 0.8409800134393955,
+            "static": 0.7311527720488641,
+            "escalation_rate": 0.32
+          },
+          "mmbench": {
+            "score": 0.88,
+            "static": 0.88,
+            "escalation_rate": 0.0
+          },
+          "textvqa": {
+            "score": 0.6866666666666665,
+            "static": 0.6333333333333333,
+            "escalation_rate": 0.6
+          }
+        }
+      },
+      "cascade_minus_static": {
+        "diff": 0.0543868582412883,
+        "low": 0.029825558387291617,
+        "high": 0.08018890084881451,
+        "p_le_0": 0.0
+      },
+      "latency": {
+        "static_median_s": 0.584295,
+        "offload_median_s": 0.60535,
+        "reprefill_median_s": 0.608545,
+        "static_mean_s": 0.5597255999999999,
+        "offload_mean_s": 0.6095995,
+        "reprefill_mean_s": 0.7722298666666667,
+        "escalated_offload_median_s": 0.7455,
+        "escalated_reprefill_median_s": 1.273325,
+        "transfer_median_ms": 1.125,
+        "reprefill_extra_median_ms": 518.675,
+        "offload_copy_median_ms": 1.13
+      },
+      "memory": {
+        "peak_decode_kv_mb_median": 1.7578125,
+        "parked_mb_median": 2.1796875
+      }
+    }
+  }
+}

@@ -58,9 +58,11 @@ The central research question: **what cheap signal tells us, before answering, t
 
 The memory saving matters when many requests share a KV pool. Show it end to end.
 
-- 🚧 **Cheap escalation** (motivated by v0.2): one prefill, the escalation cache parked in pinned CPU memory,
-  the cheap cache freed before the retry (`uniinfer.runtime.escalation`). End-to-end run on new, held-out
-  requests is in progress (`experiments/escalation`).
+- ✅ **Cheap escalation** (motivated by v0.2): one prefill, the escalation cache parked in pinned CPU memory,
+  the cheap cache freed before the retry (`uniinfer.runtime.escalation`). On new requests a retry costs
+  about 1 ms instead of a 0.5 s re-prefill, and confidence-chosen escalation beats random escalation at
+  equal cost by 2–3 points (`experiments/escalation`).
+- 📋 **Escalation under load:** park caches for many concurrent requests; host-memory and PCIe budgets.
 - 📋 Batched decode with **heterogeneous per-request KV lengths**
 - 📋 Admission control: requests/sec and tail latency under a fixed KV-memory cap
 - 📋 vLLM integration (paged KV plus per-request token budgets)
