@@ -1,0 +1,28 @@
+new requests: 300 (docvqa=100, mmbench=100, textvqa=100)
+uncompressed score 0.891 [0.858, 0.922]   docvqa 0.957  mmbench 0.880  textvqa 0.837
+offload and re-prefill give identical answers on every request: True
+
+=== budget 7.5% (plan fit on the v0.2 requests) ===
+  static   score 0.836  KV cost 0.070
+  cascade  score 0.867  KV cost max 0.073 (sum 0.082)  escalated 14%
+  cascade - static: +0.031 [+0.016, +0.051]  P(<=0)=0.000
+    docvqa   static 0.885  cascade 0.896  escalated 7%
+    mmbench  static 0.880  cascade 0.880  escalated 0%
+    textvqa  static 0.743  cascade 0.827  escalated 34%
+  latency (median s/request): static 0.584  cascade+offload 0.605  cascade+re-prefill 0.596
+  latency (mean s/request):   static 0.570  cascade+offload 0.589  cascade+re-prefill 0.652
+    escalated requests only: offload 0.732 s vs re-prefill 1.221 s; PCIe copy back 1.4 ms vs re-prefill extra 510 ms; parking copy 1.5 ms per request
+  GPU-resident decode KV (median): 2.5 MB; parked in host memory: 5.3 MB
+
+=== budget 5% (plan fit on the v0.2 requests) ===
+  static   score 0.748  KV cost 0.050
+  cascade  score 0.803  KV cost max 0.049 (sum 0.058)  escalated 31%
+  cascade - static: +0.054 [+0.030, +0.080]  P(<=0)=0.000
+    docvqa   static 0.731  cascade 0.841  escalated 32%
+    mmbench  static 0.880  cascade 0.880  escalated 0%
+    textvqa  static 0.633  cascade 0.687  escalated 60%
+  latency (median s/request): static 0.584  cascade+offload 0.605  cascade+re-prefill 0.609
+  latency (mean s/request):   static 0.560  cascade+offload 0.610  cascade+re-prefill 0.772
+    escalated requests only: offload 0.746 s vs re-prefill 1.273 s; PCIe copy back 1.1 ms vs re-prefill extra 519 ms; parking copy 1.1 ms per request
+  GPU-resident decode KV (median): 1.8 MB; parked in host memory: 2.2 MB
+

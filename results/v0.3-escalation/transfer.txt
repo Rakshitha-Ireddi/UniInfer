@@ -1,0 +1,34 @@
+held-out requests: 1050 (docvqa=350, mmbench=350, textvqa=350), none used to fit the plan
+uncompressed: 0.876
+
+=== budget 7.5% ===
+  static             score 0.793  KV cost 0.070
+  task-aware         score 0.817  KV cost 0.075
+  cascade            score 0.830  KV cost 0.075
+  random escalation  score 0.808  KV cost 0.075
+  task-aware ratios: {'docvqa': 0.08, 'mmbench': 0.02, 'textvqa': 0.1}; cascade escalates 16%
+    docvqa   static 0.823  task-aware 0.841  cascade 0.854  random 0.834  escalated 13%
+    mmbench  static 0.851  task-aware 0.851  cascade 0.851  random 0.851  escalated 0%
+    textvqa  static 0.704  task-aware 0.759  cascade 0.786  random 0.739  escalated 36%
+  paired differences (95% CI, stratified request bootstrap):
+    cascade - static       +0.038 [+0.026, +0.049]  P(<=0)=0.000
+    task-aware - static    +0.024 [+0.014, +0.034]  P(<=0)=0.000
+    cascade - task-aware   +0.013 [+0.003, +0.024]  P(<=0)=0.004
+    cascade - random       +0.022 [+0.014, +0.032]  P(<=0)=0.000
+
+=== budget 5% ===
+  static             score 0.712  KV cost 0.050
+  task-aware         score 0.712  KV cost 0.048
+  cascade            score 0.747  KV cost 0.049
+  random escalation  score 0.721  KV cost 0.049
+  task-aware ratios: {'docvqa': 0.05, 'mmbench': 0.02, 'textvqa': 0.05}; cascade escalates 32%
+    docvqa   static 0.702  task-aware 0.702  cascade 0.772  random 0.738  escalated 30%
+    mmbench  static 0.851  task-aware 0.851  cascade 0.851  random 0.851  escalated 0%
+    textvqa  static 0.582  task-aware 0.582  cascade 0.618  random 0.574  escalated 66%
+  paired differences (95% CI, stratified request bootstrap):
+    cascade - static       +0.036 [+0.021, +0.050]  P(<=0)=0.000
+    task-aware - static    +0.000 [+0.000, +0.000]  P(<=0)=1.000
+    cascade - task-aware   +0.036 [+0.021, +0.050]  P(<=0)=0.000
+    cascade - random       +0.026 [+0.017, +0.035]  P(<=0)=0.000
+
+replay vs GPU run on 87 shared requests x 2 budgets: 348/348 answers identical (static and cascade), 174/174 escalation decisions identical
