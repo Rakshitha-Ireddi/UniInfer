@@ -13,6 +13,7 @@ from uniinfer.compression import (
     snapkv_scores,
     window_attention,
 )
+from uniinfer.compression.attention import PYRAMID_BETA, WINDOW
 
 
 def _naive(q, k):
@@ -122,3 +123,67 @@ def test_flat_pyramid_is_snapkv():
     b = compress_kv_snapkv(cache, queries, ratio=0.3)
     assert all(torch.equal(x, y) for x, y in zip(a.key_cache, b.key_cache))
     assert all(torch.equal(x, y) for x, y in zip(a.value_cache, b.value_cache))
+
+
+@pytest.mark.parametrize("compress", [compress_kv_snapkv, compress_kv_pyramid])
+@pytest.mark.parametrize("ratio", [0.01, 0.05, 0.25, 0.75])
+def test_kv_compression_always_keeps_observation_window_in_order(compress, ratio):
+    """Every layer and KV head keeps the last WINDOW tokens and preserves original sequence order."""
+    layers, Hkv, H, L, D = 6, 2, 4, 400, 16
+    cache = _cache(layers, Hkv, L, D, seed=7)
+    g = torch.Generator().manual_seed(11)
+    queries = {li: torch.randn(1, H, WINDOW, D, generator=g) for li in range(layers)}
+
+    out = compress(cache, queries, ratio=ratio)
+
+    assert [k.shape[-2] for k in cache.key_cache] == [L] * layers
+    for li in range(layers):
+        for h in range(Hkv):
+            orig_k = cache.key_cache[li][0, h]
+            kept_k = out.key_cache[li][0, h]
+            if ratio * L < WINDOW:
+                assert kept_k.shape[0] == WINDOW
+            else:
+                assert kept_k.shape[0] >= WINDOW
+            matches = (kept_k[:, None, :] == orig_k[None, :, :]).all(dim=-1)
+            assert (matches.sum(dim=-1) == 1).all()
+            orig_idx = matches.int().argmax(dim=-1)
+            assert (orig_idx[1:] > orig_idx[:-1]).all()
+            assert orig_idx[-WINDOW:].tolist() == list(range(L - WINDOW, L))
+            assert torch.equal(kept_k[-WINDOW:], orig_k[-WINDOW:])
+            assert torch.equal(out.value_cache[li][0, h], cache.value_cache[li][0, h, orig_idx])
+
+
+def test_pyramid_top_layer_floor_and_average_preservation():
+    """Top layer keeps exactly WINDOW tokens when avg / beta < WINDOW (uncapped), and average stays within 1."""
+    for n_layers in (4, 6, 36):
+        for L, ratio in ((200, 0.01), (200, 0.05), (400, 0.05), (400, 0.25), (400, 0.5), (1000, 0.25)):
+            avg = max(WINDOW, ratio * L)
+            assert avg / PYRAMID_BETA < WINDOW
+            assert pyramid_budgets(n_layers, L, ratio)[-1] == WINDOW
+
+    for n_layers in (3, 6, 36):
+        for L in (101, 200, 333, 400, 1000):
+            for ratio in (0.05, 0.1, 0.25, 0.5, 0.75):
+                if ratio * L >= WINDOW:
+                    budgets = pyramid_budgets(n_layers, L, ratio)
+                    assert abs(sum(budgets) / len(budgets) - ratio * L) <= 1.0
+
+
+def test_pyramid_cache_top_layer_floor_and_average():
+    """compress_kv_pyramid hits the WINDOW floor on the top layer and preserves average cost within 1 token."""
+    layers, Hkv, H, L, D = 6, 2, 4, 400, 16
+    cache = _cache(layers, Hkv, L, D, seed=13)
+    g = torch.Generator().manual_seed(17)
+    queries = {li: torch.randn(1, H, WINDOW, D, generator=g) for li in range(layers)}
+
+    floor_out = compress_kv_pyramid(cache, queries, ratio=0.01)
+    assert [k.shape[-2] for k in floor_out.key_cache] == [WINDOW] * layers
+
+    for ratio in (0.05, 0.25):
+        out = compress_kv_pyramid(cache, queries, ratio=ratio)
+        assert out.key_cache[-1].shape[-2] == WINDOW
+        assert abs(kv_tokens(out) - ratio * L) <= 1.0
+
+    capped_out = compress_kv_pyramid(cache, queries, ratio=0.75)
+    assert abs(kv_tokens(capped_out) - 0.75 * L) <= 1.0
